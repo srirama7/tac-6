@@ -240,7 +240,32 @@ def generate_branch_name(
     if not response.success:
         return None, response.output
 
-    branch_name = response.output.strip()
+    # Extract branch name from response (may contain explanation text)
+    # The actual branch name should match the pattern: <type>-issue-<num>-adw-<id>-<name>
+    output = response.output.strip()
+
+    # Look for the branch name pattern in the output
+    # Pattern: word-issue-number-adw-hex-words-with-hyphens
+    import re
+    branch_pattern = r'(?:^|\n)([a-z]+-issue-\d+-adw-[a-f0-9]+-[a-z0-9-]+)(?:\s|$)'
+    match = re.search(branch_pattern, output, re.MULTILINE)
+
+    if match:
+        branch_name = match.group(1)
+    else:
+        # Fallback: try to get the last non-empty line
+        lines = [line.strip() for line in output.split('\n') if line.strip()]
+        if lines:
+            # Check if last line looks like a branch name (no spaces, has hyphens)
+            last_line = lines[-1]
+            if ' ' not in last_line and '-' in last_line:
+                branch_name = last_line
+            else:
+                # Return error with the response for debugging
+                return None, f"Could not extract branch name from response: {output}"
+        else:
+            return None, "Empty response from branch generator"
+
     logger.info(f"Generated branch name: {branch_name}")
     return branch_name, None
 

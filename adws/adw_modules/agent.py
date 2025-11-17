@@ -45,7 +45,7 @@ def parse_jsonl_output(
         Tuple of (all_messages, result_message) where result_message is None if not found
     """
     try:
-        with open(output_file, "r") as f:
+        with open(output_file, "r", encoding='utf-8', errors='replace') as f:
             # Read all lines and parse each as JSON
             messages = [json.loads(line) for line in f if line.strip()]
 
@@ -78,8 +78,8 @@ def convert_jsonl_to_json(jsonl_file: str) -> str:
     messages, _ = parse_jsonl_output(jsonl_file)
 
     # Write as JSON array
-    with open(json_file, "w") as f:
-        json.dump(messages, f, indent=2)
+    with open(json_file, "w", encoding='utf-8', errors='replace') as f:
+        json.dump(messages, f, indent=2, ensure_ascii=False)
 
     print(f"Created JSON file: {json_file}")
     return json_file
@@ -105,8 +105,8 @@ def get_claude_env() -> Dict[str, str]:
     result = subprocess.run(cmd, capture_output=True, text=True, env={})
     """
     required_env_vars = {
-        # Anthropic Configuration (required)
-        "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
+        # Anthropic Configuration - NOT passed to subprocess, Claude Code uses its own auth
+        # "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
         # Claude Code Configuration
         "CLAUDE_CODE_PATH": os.getenv("CLAUDE_CODE_PATH", "claude"),
         "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": os.getenv(
@@ -151,7 +151,7 @@ def save_prompt(prompt: str, adw_id: str, agent_name: str = "ops") -> None:
 
     # Save prompt to file
     prompt_file = os.path.join(prompt_dir, f"{command_name}.txt")
-    with open(prompt_file, "w") as f:
+    with open(prompt_file, "w", encoding='utf-8', errors='replace') as f:
         f.write(prompt)
 
     print(f"Saved prompt to: {prompt_file}")
@@ -183,14 +183,15 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
     if request.dangerously_skip_permissions:
         cmd.append("--dangerously-skip-permissions")
 
-    # Set up environment with only required variables
-    env = get_claude_env()
+    # Set up environment - inherit parent environment for Windows compatibility
+    # Windows Claude Code needs full environment to find DLLs
+    env = None  # None means inherit parent environment
 
     try:
         # Execute Claude Code and pipe output to file
-        with open(request.output_file, "w") as f:
+        with open(request.output_file, "w", encoding='utf-8', errors='replace') as f:
             result = subprocess.run(
-                cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env
+                cmd, stdout=f, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', env=env
             )
 
         if result.returncode == 0:
