@@ -45,18 +45,34 @@ def parse_jsonl_output(
         Tuple of (all_messages, result_message) where result_message is None if not found
     """
     try:
-        with open(output_file, "r") as f:
-            # Read all lines and parse each as JSON
-            messages = [json.loads(line) for line in f if line.strip()]
+        # First try UTF-8, then fall back to reading raw bytes if that fails
+        try:
+            with open(output_file, "r", encoding='utf-8', errors='replace') as f:
+                content = f.read()
+        except Exception:
+            # If UTF-8 fails, read as binary and decode with replace
+            with open(output_file, "rb") as f:
+                content = f.read().decode('utf-8', errors='replace')
 
-            # Find the result message (should be the last one)
-            result_message = None
-            for message in reversed(messages):
-                if message.get("type") == "result":
-                    result_message = message
-                    break
+        # Parse each line as JSON
+        messages = []
+        for line in content.split('\n'):
+            line = line.strip()
+            if line:
+                try:
+                    messages.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    print(f"Warning: Failed to parse JSON line: {e}", file=sys.stderr)
+                    continue
 
-            return messages, result_message
+        # Find the result message (should be the last one)
+        result_message = None
+        for message in reversed(messages):
+            if message.get("type") == "result":
+                result_message = message
+                break
+
+        return messages, result_message
     except Exception as e:
         print(f"Error parsing JSONL file: {e}", file=sys.stderr)
         return [], None
@@ -78,70 +94,65 @@ def convert_jsonl_to_json(jsonl_file: str) -> str:
     messages, _ = parse_jsonl_output(jsonl_file)
 
     # Write as JSON array
-    with open(json_file, "w") as f:
-        json.dump(messages, f, indent=2)
+    with open(json_file, "w", encoding='utf-8') as f:
+        json.dump(messages, f, indent=2, ensure_ascii=False)
 
     print(f"Created JSON file: {json_file}")
     return json_file
 
 
 def get_claude_env() -> Dict[str, str]:
-    """Get only the required environment variables for Claude Code execution.
+    """Get environment variables for Claude Code execution.
 
-    Returns a dictionary containing only the necessary environment variables
-    based on .env.sample configuration.
+    Returns a dictionary containing the full system environment
+    with specific overrides for Claude Code configuration.
 
-    Subprocess env behavior:
-    - env=None → Inherits parent's environment (default)
-    - env={} → Empty environment (no variables)
-    - env=custom_dict → Only uses specified variables
-
-    So this will work with gh authentication:
-    # These are equivalent:
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    result = subprocess.run(cmd, capture_output=True, text=True, env=None)
-
-    But this will NOT work (no PATH, no auth):
-    result = subprocess.run(cmd, capture_output=True, text=True, env={})
+    On Windows, many system environment variables (SystemRoot, WINDIR, etc.)
+    are required for executables to run properly, so we inherit the full
+    environment and only override specific values.
     """
-    required_env_vars = {
-        # Anthropic Configuration (required)
-        "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
-        # Claude Code Configuration
-        "CLAUDE_CODE_PATH": os.getenv("CLAUDE_CODE_PATH", "claude"),
-        "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": os.getenv(
-            "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR", "true"
-        ),
-        # Agent Cloud Sandbox Environment (optional)
-        "E2B_API_KEY": os.getenv("E2B_API_KEY"),
-        # Basic environment variables Claude Code might need
-        "HOME": os.getenv("HOME"),
-        "USER": os.getenv("USER"),
-        "PATH": os.getenv("PATH"),
-        "SHELL": os.getenv("SHELL"),
-        "TERM": os.getenv("TERM"),
-    }
+    # Start with the full system environment
+    env = os.environ.copy()
 
-    # Only add GitHub tokens if GITHUB_PAT exists
+    # Override/add specific values if they exist
+    if os.getenv("ANTHROPIC_API_KEY"):
+        env["ANTHROPIC_API_KEY"] = os.getenv("ANTHROPIC_API_KEY")
+
+    if os.getenv("CLAUDE_CODE_PATH"):
+        env["CLAUDE_CODE_PATH"] = os.getenv("CLAUDE_CODE_PATH")
+
+    if os.getenv("CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"):
+        env["CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"] = os.getenv(
+            "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR", "true"
+        )
+
+    if os.getenv("E2B_API_KEY"):
+        env["E2B_API_KEY"] = os.getenv("E2B_API_KEY")
+
+    # Add GitHub tokens if GITHUB_PAT exists
     github_pat = os.getenv("GITHUB_PAT")
     if github_pat:
-        required_env_vars["GITHUB_PAT"] = github_pat
-        required_env_vars["GH_TOKEN"] = github_pat  # Claude Code uses GH_TOKEN
+        env["GITHUB_PAT"] = github_pat
+        env["GH_TOKEN"] = github_pat  # Claude Code uses GH_TOKEN
 
-    # Filter out None values
-    return {k: v for k, v in required_env_vars.items() if v is not None}
+    return env
 
 
-def save_prompt(prompt: str, adw_id: str, agent_name: str = "ops") -> None:
-    """Save a prompt to the appropriate logging directory."""
+def save_prompt(prompt: str, adw_id: str, agent_name: str = "ops") -> str:
+    """Save a prompt to the appropriate logging directory.
+
+    Returns:
+        Path to the saved prompt file
+    """
     # Extract slash command from prompt
     match = re.match(r"^(/\w+)", prompt)
     if not match:
-        return
-
-    slash_command = match.group(1)
-    # Remove leading slash for filename
-    command_name = slash_command[1:]
+        # If no slash command found, use a generic name
+        command_name = "prompt"
+    else:
+        slash_command = match.group(1)
+        # Remove leading slash for filename
+        command_name = slash_command[1:]
 
     # Create directory structure at project root (parent of adws)
     # __file__ is in adws/adw_modules/, so we need to go up 3 levels to get to project root
@@ -151,10 +162,11 @@ def save_prompt(prompt: str, adw_id: str, agent_name: str = "ops") -> None:
 
     # Save prompt to file
     prompt_file = os.path.join(prompt_dir, f"{command_name}.txt")
-    with open(prompt_file, "w") as f:
+    with open(prompt_file, "w", encoding='utf-8') as f:
         f.write(prompt)
 
     print(f"Saved prompt to: {prompt_file}")
+    return prompt_file
 
 
 def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
@@ -166,18 +178,19 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
         return AgentPromptResponse(output=error_msg, success=False, session_id=None)
 
     # Save prompt before execution
-    save_prompt(request.prompt, request.adw_id, request.agent_name)
+    prompt_file = save_prompt(request.prompt, request.adw_id, request.agent_name)
 
     # Create output directory if needed
     output_dir = os.path.dirname(request.output_file)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
-    # Build command - always use stream-json format and verbose
-    cmd = [CLAUDE_PATH, "-p", request.prompt]
+    # Build command - use stdin to pass prompt (avoids Windows command-line length limits)
+    cmd = [CLAUDE_PATH]
     cmd.extend(["--model", request.model])
+    cmd.extend(["-p"])  # Enable print mode
+    cmd.extend(["--verbose"])
     cmd.extend(["--output-format", "stream-json"])
-    cmd.append("--verbose")
 
     # Add dangerous skip permissions flag if enabled
     if request.dangerously_skip_permissions:
@@ -187,11 +200,27 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
     env = get_claude_env()
 
     try:
-        # Execute Claude Code and pipe output to file
-        with open(request.output_file, "w") as f:
+        # Debug: print the command being executed
+        print(f"DEBUG: Executing command: {' '.join(cmd)}")
+        print(f"DEBUG: Working directory: {os.getcwd()}")
+        print(f"DEBUG: Output file: {request.output_file}")
+        print(f"DEBUG: Prompt length: {len(request.prompt)} characters")
+
+        # Execute Claude Code with prompt via stdin and pipe output to file
+        with open(request.output_file, "w", encoding='utf-8') as f:
             result = subprocess.run(
-                cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env
+                cmd,
+                input=request.prompt,
+                stdout=f,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                env=env
             )
+
+        print(f"DEBUG: Return code: {result.returncode}")
+        print(f"DEBUG: Stderr: {result.stderr[:500] if result.stderr else '(empty)'}")
 
         if result.returncode == 0:
             print(f"Output saved to: {request.output_file}")

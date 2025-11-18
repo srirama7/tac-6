@@ -25,6 +25,11 @@ import json
 from typing import Optional
 from dotenv import load_dotenv
 
+# Force UTF-8 encoding on Windows to handle emojis and Unicode characters
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 from adw_modules.state import ADWState
 from adw_modules.git_ops import create_branch, commit_changes, finalize_git_operations
 from adw_modules.github import (
@@ -48,9 +53,12 @@ from adw_modules.data_types import GitHubIssue, IssueClassSlashCommand
 
 
 def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
-    """Check that all required environment variables are set."""
+    """Check that all required environment variables are set.
+
+    Note: ANTHROPIC_API_KEY is not required as we use Claude Code CLI which
+    handles authentication internally.
+    """
     required_vars = [
-        "ANTHROPIC_API_KEY",
         "CLAUDE_CODE_PATH",
     ]
     missing_vars = [var for var in required_vars if not os.getenv(var)]

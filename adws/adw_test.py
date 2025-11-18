@@ -61,9 +61,12 @@ MAX_E2E_TEST_RETRY_ATTEMPTS = 2  # E2E ui tests
 
 
 def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
-    """Check that all required environment variables are set."""
+    """Check that all required environment variables are set.
+
+    Note: ANTHROPIC_API_KEY is not required as we use Claude Code CLI which
+    handles authentication internally.
+    """
     required_vars = [
-        "ANTHROPIC_API_KEY",
         "CLAUDE_CODE_PATH",
     ]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
@@ -910,7 +913,7 @@ def main():
     branch_name = state.get("branch_name")
     if branch_name:
         # Try to checkout existing branch
-        result = subprocess.run(["git", "checkout", branch_name], capture_output=True, text=True)
+        result = subprocess.run(["git", "checkout", branch_name], capture_output=True, text=True, encoding='utf-8', errors='replace')
         if result.returncode != 0:
             logger.error(f"Failed to checkout branch {branch_name}: {result.stderr}")
             make_issue_comment(

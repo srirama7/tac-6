@@ -20,6 +20,11 @@ import subprocess
 import sys
 import os
 
+# Force UTF-8 encoding on Windows to handle emojis and Unicode characters
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 # Add the parent directory to Python path to import modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from adw_modules.workflow_ops import ensure_adw_id
@@ -50,7 +55,7 @@ def main():
         adw_id,
     ]
     print(f"Running: {' '.join(plan_cmd)}")
-    plan = subprocess.run(plan_cmd)
+    plan = subprocess.run(plan_cmd, encoding='utf-8', errors='replace')
     if plan.returncode != 0:
         sys.exit(1)
 
@@ -63,7 +68,7 @@ def main():
         adw_id,
     ]
     print(f"Running: {' '.join(build_cmd)}")
-    build = subprocess.run(build_cmd)
+    build = subprocess.run(build_cmd, encoding='utf-8', errors='replace')
     if build.returncode != 0:
         sys.exit(1)
 
@@ -76,7 +81,7 @@ def main():
         adw_id,
     ]
     print(f"Running: {' '.join(test_cmd)}")
-    test = subprocess.run(test_cmd)
+    test = subprocess.run(test_cmd, encoding='utf-8', errors='replace')
     if test.returncode != 0:
         sys.exit(1)
 

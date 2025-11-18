@@ -87,25 +87,55 @@ def classify_issue(
 ) -> Tuple[Optional[IssueClassSlashCommand], Optional[str]]:
     """Classify GitHub issue and return appropriate slash command.
     Returns (command, error_message) tuple."""
-    
-    # Use the classify_issue slash command template with minimal payload
-    # Only include the essential fields: number, title, body
-    minimal_issue_json = issue.model_dump_json(
-        by_alias=True, 
-        include={"number", "title", "body"}
-    )
-    
-    request = AgentTemplateRequest(
-        agent_name=AGENT_CLASSIFIER,
-        slash_command="/classify_issue",
-        args=[minimal_issue_json],
+
+    # Create a direct prompt for classification instead of using slash command
+    # (slash commands don't work properly in programmatic mode)
+    prompt = f"""# Github Issue Command Selection
+
+Based on the `Github Issue` below, follow the `Instructions` to select the appropriate command to execute based on the `Command Mapping`.
+
+## Instructions
+
+- Based on the details in the `Github Issue`, select the appropriate command to execute.
+- IMPORTANT: Respond exclusively with '/' followed by the command to execute based on the `Command Mapping` below.
+- Use the command mapping to help you decide which command to respond with.
+- Don't examine the codebase just focus on the `Github Issue` and the `Command Mapping` below to determine the appropriate command to execute.
+
+## Command Mapping
+
+- Respond with `/chore` if the issue is a chore.
+- Respond with `/bug` if the issue is a bug.
+- Respond with `/feature` if the issue is a feature.
+- Respond with `0` if the issue isn't any of the above.
+
+## Github Issue
+
+Title: {issue.title}
+Body: {issue.body or '(no description)'}
+"""
+
+    from adw_modules.agent import prompt_claude_code
+    from adw_modules.data_types import AgentPromptRequest
+    import os
+
+    # Create output directory
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    output_dir = os.path.join(project_root, "agents", adw_id, AGENT_CLASSIFIER)
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.join(output_dir, "raw_output.jsonl")
+
+    request = AgentPromptRequest(
+        prompt=prompt,
         adw_id=adw_id,
+        agent_name=AGENT_CLASSIFIER,
         model="sonnet",
+        dangerously_skip_permissions=True,
+        output_file=output_file,
     )
-    
+
     logger.debug(f"Classifying issue: {issue.title}")
-    
-    response = execute_template(request)
+
+    response = prompt_claude_code(request)
     
     logger.debug(f"Classification response: {response.model_dump_json(indent=2, by_alias=True)}")
     
@@ -397,7 +427,9 @@ def find_existing_branch_for_issue(issue_number: str, adw_id: Optional[str] = No
     result = subprocess.run(
         ["git", "branch", "-a"],
         capture_output=True,
-        text=True
+        text=True,
+        encoding='utf-8',
+        errors='replace'
     )
     
     if result.returncode != 0:
@@ -472,11 +504,11 @@ def create_or_find_branch(
         from adw_modules.git_ops import get_current_branch
         current = get_current_branch()
         if current != branch_name:
-            result = subprocess.run(["git", "checkout", branch_name], capture_output=True, text=True)
+            result = subprocess.run(["git", "checkout", branch_name], capture_output=True, text=True, encoding='utf-8', errors='replace')
             if result.returncode != 0:
                 # Branch might not exist locally, try to create from remote
-                result = subprocess.run(["git", "checkout", "-b", branch_name, f"origin/{branch_name}"], 
-                                      capture_output=True, text=True)
+                result = subprocess.run(["git", "checkout", "-b", branch_name, f"origin/{branch_name}"],
+                                      capture_output=True, text=True, encoding='utf-8', errors='replace')
                 if result.returncode != 0:
                     return "", f"Failed to checkout branch: {result.stderr}"
         return branch_name, None
@@ -487,7 +519,7 @@ def create_or_find_branch(
     if existing_branch:
         logger.info(f"Found existing branch: {existing_branch}")
         # Checkout the branch
-        result = subprocess.run(["git", "checkout", existing_branch], capture_output=True, text=True)
+        result = subprocess.run(["git", "checkout", existing_branch], capture_output=True, text=True, encoding='utf-8', errors='replace')
         if result.returncode != 0:
             return "", f"Failed to checkout branch: {result.stderr}"
         state.update(branch_name=existing_branch)
