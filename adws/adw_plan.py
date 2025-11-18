@@ -25,11 +25,6 @@ import json
 from typing import Optional
 from dotenv import load_dotenv
 
-# Force UTF-8 encoding on Windows to handle emojis and Unicode characters
-if sys.platform == 'win32':
-    sys.stdout.reconfigure(encoding='utf-8')
-    sys.stderr.reconfigure(encoding='utf-8')
-
 from adw_modules.state import ADWState
 from adw_modules.git_ops import create_branch, commit_changes, finalize_git_operations
 from adw_modules.github import (
@@ -53,12 +48,9 @@ from adw_modules.data_types import GitHubIssue, IssueClassSlashCommand
 
 
 def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
-    """Check that all required environment variables are set.
-
-    Note: ANTHROPIC_API_KEY is not required as we use Claude Code CLI which
-    handles authentication internally.
-    """
+    """Check that all required environment variables are set."""
     required_vars = [
+        "ANTHROPIC_API_KEY",
         "CLAUDE_CODE_PATH",
     ]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
@@ -128,103 +120,127 @@ def main():
         f"{adw_id}_ops: 🔍 Using state\n```json\n{json.dumps(state.data, indent=2)}\n```",
     )
 
-    # Classify the issue
-    issue_command, error = classify_issue(issue, adw_id, logger)
-
-    if error:
-        logger.error(f"Error classifying issue: {error}")
+    # Classify the issue (skip if already classified)
+    if state.data.get("issue_class"):
+        issue_command = state.data["issue_class"]
+        logger.info(f"Using existing classification: {issue_command}")
         make_issue_comment(
             issue_number,
-            format_issue_message(adw_id, "ops", f"❌ Error classifying issue: {error}"),
+            format_issue_message(adw_id, "ops", f"✅ Using existing classification: {issue_command}"),
         )
-        sys.exit(1)
+    else:
+        issue_command, error = classify_issue(issue, adw_id, logger)
 
-    state.update(issue_class=issue_command)
-    state.save("adw_plan")
-    logger.info(f"Issue classified as: {issue_command}")
-    make_issue_comment(
-        issue_number,
-        format_issue_message(adw_id, "ops", f"✅ Issue classified as: {issue_command}"),
-    )
+        if error:
+            logger.error(f"Error classifying issue: {error}")
+            make_issue_comment(
+                issue_number,
+                format_issue_message(adw_id, "ops", f"❌ Error classifying issue: {error}"),
+            )
+            sys.exit(1)
 
-    # Generate branch name
-    branch_name, error = generate_branch_name(issue, issue_command, adw_id, logger)
-
-    if error:
-        logger.error(f"Error generating branch name: {error}")
+        state.update(issue_class=issue_command)
+        state.save("adw_plan")
+        logger.info(f"Issue classified as: {issue_command}")
         make_issue_comment(
             issue_number,
-            format_issue_message(
-                adw_id, "ops", f"❌ Error generating branch name: {error}"
-            ),
+            format_issue_message(adw_id, "ops", f"✅ Issue classified as: {issue_command}"),
         )
-        sys.exit(1)
 
-    # Create git branch
-    success, error = create_branch(branch_name)
-
-    if not success:
-        logger.error(f"Error creating branch: {error}")
+    # Generate branch name (skip if already exists)
+    if state.data.get("branch_name"):
+        branch_name = state.data["branch_name"]
+        logger.info(f"Using existing branch: {branch_name}")
         make_issue_comment(
             issue_number,
-            format_issue_message(adw_id, "ops", f"❌ Error creating branch: {error}"),
+            format_issue_message(adw_id, "ops", f"✅ Using existing branch: {branch_name}"),
         )
-        sys.exit(1)
+    else:
+        branch_name, error = generate_branch_name(issue, issue_command, adw_id, logger)
 
-    state.update(branch_name=branch_name)
-    state.save("adw_plan")
-    logger.info(f"Working on branch: {branch_name}")
-    make_issue_comment(
-        issue_number,
-        format_issue_message(adw_id, "ops", f"✅ Working on branch: {branch_name}"),
-    )
+        if error:
+            logger.error(f"Error generating branch name: {error}")
+            make_issue_comment(
+                issue_number,
+                format_issue_message(
+                    adw_id, "ops", f"❌ Error generating branch name: {error}"
+                ),
+            )
+            sys.exit(1)
 
-    # Build the implementation plan
-    logger.info("Building implementation plan")
-    make_issue_comment(
-        issue_number,
-        format_issue_message(adw_id, AGENT_PLANNER, "✅ Building implementation plan"),
-    )
+        # Create git branch
+        success, error = create_branch(branch_name)
 
-    plan_response = build_plan(issue, issue_command, adw_id, logger)
+        if not success:
+            logger.error(f"Error creating branch: {error}")
+            make_issue_comment(
+                issue_number,
+                format_issue_message(adw_id, "ops", f"❌ Error creating branch: {error}"),
+            )
+            sys.exit(1)
 
-    if not plan_response.success:
-        logger.error(f"Error building plan: {plan_response.output}")
+        state.update(branch_name=branch_name)
+        state.save("adw_plan")
+        logger.info(f"Working on branch: {branch_name}")
         make_issue_comment(
             issue_number,
-            format_issue_message(
-                adw_id, AGENT_PLANNER, f"❌ Error building plan: {plan_response.output}"
-            ),
+            format_issue_message(adw_id, "ops", f"✅ Working on branch: {branch_name}"),
         )
-        sys.exit(1)
 
-    logger.debug(f"Plan response: {plan_response.output}")
-    make_issue_comment(
-        issue_number,
-        format_issue_message(adw_id, AGENT_PLANNER, "✅ Implementation plan created"),
-    )
-
-    # Find the plan file that was created
-    logger.info("Finding plan file")
-    plan_file_path, error = get_plan_file(
-        plan_response.output, issue_number, adw_id, logger
-    )
-
-    if error:
-        logger.error(f"Error finding plan file: {error}")
+    # Build the implementation plan (skip if already exists)
+    if state.data.get("plan_file"):
+        plan_file_path = state.data["plan_file"]
+        logger.info(f"Using existing plan file: {plan_file_path}")
         make_issue_comment(
             issue_number,
-            format_issue_message(adw_id, "ops", f"❌ Error finding plan file: {error}"),
+            format_issue_message(adw_id, "ops", f"✅ Using existing plan file: {plan_file_path}"),
         )
-        sys.exit(1)
+    else:
+        logger.info("Building implementation plan")
+        make_issue_comment(
+            issue_number,
+            format_issue_message(adw_id, AGENT_PLANNER, "✅ Building implementation plan"),
+        )
 
-    state.update(plan_file=plan_file_path)
-    state.save("adw_plan")
-    logger.info(f"Plan file created: {plan_file_path}")
-    make_issue_comment(
-        issue_number,
-        format_issue_message(adw_id, "ops", f"✅ Plan file created: {plan_file_path}"),
-    )
+        plan_response = build_plan(issue, issue_command, adw_id, logger)
+
+        if not plan_response.success:
+            logger.error(f"Error building plan: {plan_response.output}")
+            make_issue_comment(
+                issue_number,
+                format_issue_message(
+                    adw_id, AGENT_PLANNER, f"❌ Error building plan: {plan_response.output}"
+                ),
+            )
+            sys.exit(1)
+
+        logger.debug(f"Plan response: {plan_response.output}")
+        make_issue_comment(
+            issue_number,
+            format_issue_message(adw_id, AGENT_PLANNER, "✅ Implementation plan created"),
+        )
+
+        # Find the plan file that was created
+        logger.info("Finding plan file")
+        plan_file_path, error = get_plan_file(
+            plan_response.output, issue_number, adw_id, logger
+        )
+
+        if error:
+            logger.error(f"Error finding plan file: {error}")
+            make_issue_comment(
+                issue_number,
+                format_issue_message(adw_id, "ops", f"❌ Error finding plan file: {error}"),
+            )
+            sys.exit(1)
+
+        state.update(plan_file=plan_file_path)
+        state.save("adw_plan")
+        logger.info(f"Plan file created: {plan_file_path}")
+        make_issue_comment(
+            issue_number,
+            format_issue_message(adw_id, "ops", f"✅ Plan file created: {plan_file_path}"),
+        )
 
     # Create commit message
     logger.info("Creating plan commit")
