@@ -246,12 +246,30 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
 
 def execute_template(request: AgentTemplateRequest) -> AgentPromptResponse:
     """Execute a Claude Code template with slash command and arguments."""
-    # Construct prompt from slash command and args
-    prompt = f"{request.slash_command} {' '.join(request.args)}"
+    # Get project root (3 levels up from adws/adw_modules/)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    # Try to read the slash command template file
+    slash_cmd_name = request.slash_command.lstrip('/')
+    template_path = os.path.join(project_root, ".claude", "commands", f"{slash_cmd_name}.md")
+
+    if os.path.exists(template_path):
+        # Read template and replace placeholders
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template_content = f.read()
+
+        # Replace $ARGUMENTS placeholder (all args joined)
+        args_text = ' '.join(request.args)
+        prompt = template_content.replace('$ARGUMENTS', args_text)
+
+        # Replace numbered placeholders $1, $2, $3, etc.
+        for i, arg in enumerate(request.args, start=1):
+            prompt = prompt.replace(f'${i}', arg)
+    else:
+        # Fallback: construct prompt from slash command and args (old behavior)
+        prompt = f"{request.slash_command} {' '.join(request.args)}"
 
     # Create output directory with adw_id at project root
-    # __file__ is in adws/adw_modules/, so we need to go up 3 levels to get to project root
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     output_dir = os.path.join(
         project_root, "agents", request.adw_id, request.agent_name
     )
