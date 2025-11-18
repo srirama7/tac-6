@@ -1,0 +1,41 @@
+ADW Logger initialized - ID: 57d3b31c
+🔍 Found existing state from C:\Users\amogh\Downloads\tac5new\tac-5\agents\57d3b31c\adw_state.json
+State: {
+  "adw_id": "57d3b31c",
+  "issue_number": "25",
+  "branch_name": "chore-issue-25-adw-57d3b31c-test-adw-workflow",
+  "plan_file": "specs/issue-25-adw-57d3b31c-sdlc_planner-test-adw-workflow.md",
+  "issue_class": "/chore"
+}
+Found existing ADW state for ID: 57d3b31c
+🔍 Found existing state from C:\Users\amogh\Downloads\tac5new\tac-5\agents\57d3b31c\adw_state.json
+State: {
+  "adw_id": "57d3b31c",
+  "issue_number": "25",
+  "branch_name": "chore-issue-25-adw-57d3b31c-test-adw-workflow",
+  "plan_file": "specs/issue-25-adw-57d3b31c-sdlc_planner-test-adw-workflow.md",
+  "issue_class": "/chore"
+}
+ADW Logger initialized - ID: 57d3b31c
+ADW Test starting - ID: 57d3b31c, Issue: 25
+Checked out existing branch: chore-issue-25-adw-57d3b31c-test-adw-workflow
+Successfully posted comment to issue #25
+
+=== Running test suite ===
+Successfully posted comment to issue #25
+
+=== Test Run Attempt 1/4 ===
+Saved prompt to: C:\Users\amogh\Downloads\tac5new\tac-5\agents\57d3b31c\test_runner\prompts\prompt.txt
+DEBUG: Executing command: C:\Users\amogh\.local\bin\claude.exe --model sonnet -p --verbose --output-format stream-json --dangerously-skip-permissions
+DEBUG: Working directory: C:\Users\amogh\Downloads\tac5new\tac-5\adws
+DEBUG: Output file: C:\Users\amogh\Downloads\tac5new\tac-5\agents\57d3b31c\test_runner\raw_output.jsonl
+DEBUG: Prompt length: 4658 characters
+DEBUG: Return code: 0
+DEBUG: Stderr: (empty)
+Output saved to: C:\Users\amogh\Downloads\tac5new\tac-5\agents\57d3b31c\test_runner\raw_output.jsonl
+Created JSON file: C:\Users\amogh\Downloads\tac5new\tac-5\agents\57d3b31c\test_runner\raw_output.json
+
+=== Attempting to resolve failed tests ===
+Successfully posted comment to issue #25
+
+=== Resolving failed test 1/1: python_syntax_check ===

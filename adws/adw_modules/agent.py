@@ -259,7 +259,17 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
                     output=raw_output, success=True, session_id=None
                 )
         else:
-            error_msg = f"Claude Code error: {result.stderr}"
+            # Check for fatal Windows error codes that indicate crashes
+            # 3221226505 (0xC0000409) = STATUS_STACK_BUFFER_OVERRUN
+            fatal_error_codes = [3221226505, 3221225477]  # Common crash codes
+
+            if result.returncode in fatal_error_codes:
+                error_msg = f"Claude Code CLI crashed with fatal error (code: {result.returncode}). This is a critical error that cannot be automatically resolved."
+            elif result.stderr:
+                error_msg = f"Claude Code error: {result.stderr}"
+            else:
+                error_msg = f"Claude Code failed with exit code {result.returncode} (no error message available)"
+
             print(error_msg, file=sys.stderr)
             return AgentPromptResponse(output=error_msg, success=False, session_id=None)
 

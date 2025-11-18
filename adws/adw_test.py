@@ -593,11 +593,19 @@ def execute_single_e2e_test(
 
     if not response.success:
         logger.error(f"Error running E2E test {test_name}: {response.output}")
+
+        # Check if this is a fatal CLI crash that shouldn't be retried
+        is_fatal_crash = "crashed with fatal error" in response.output
+
+        error_msg = f"Test execution error: {response.output}"
+        if is_fatal_crash:
+            error_msg += " [FATAL - Cannot be automatically resolved]"
+
         return E2ETestResult(
             test_name=test_name,
             status="failed",
             test_path=test_file,
-            error=f"Test execution error: {response.output}",
+            error=error_msg,
         )
 
     # Parse the response
@@ -812,6 +820,31 @@ def run_e2e_tests_with_resolution(
 
         # If we have failed tests and this isn't the last attempt, try to resolve
         logger.info("\n=== Attempting to resolve failed E2E tests ===")
+
+        # Get list of failed tests
+        failed_tests = [test for test in results if not test.passed]
+
+        # Check if any failures are fatal crashes that can't be resolved
+        fatal_failures = [
+            test for test in failed_tests
+            if test.error and "[FATAL - Cannot be automatically resolved]" in test.error
+        ]
+
+        if fatal_failures:
+            logger.warning(
+                f"Found {len(fatal_failures)} fatal crash(es) that cannot be resolved automatically"
+            )
+            make_issue_comment(
+                issue_number,
+                format_issue_message(
+                    adw_id,
+                    "ops",
+                    f"⚠️ Found {len(fatal_failures)} fatal CLI crash(es). These cannot be automatically resolved and require manual intervention.",
+                ),
+            )
+            # Skip resolution for fatal crashes
+            break
+
         make_issue_comment(
             issue_number,
             format_issue_message(
@@ -820,9 +853,6 @@ def run_e2e_tests_with_resolution(
                 f"🔧 Found {failed_count} failed E2E tests. Attempting resolution...",
             ),
         )
-
-        # Get list of failed tests
-        failed_tests = [test for test in results if not test.passed]
 
         # Attempt resolution
         resolved, unresolved = resolve_failed_e2e_tests(
