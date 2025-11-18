@@ -536,12 +536,19 @@ def run_e2e_tests(
     """Run all E2E tests found in .claude/commands/e2e/*.md sequentially."""
     import glob
 
+    # Get project root (parent of adws directory if we're in adws, otherwise current dir)
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.exists(os.path.join(project_root, ".claude")):
+        # If .claude doesn't exist in parent, we're already in project root
+        project_root = os.getcwd()
+
     # Find all E2E test files
-    e2e_test_files = glob.glob(".claude/commands/e2e/*.md")
-    logger.info(f"Found {len(e2e_test_files)} E2E test files")
+    e2e_pattern = os.path.join(project_root, ".claude", "commands", "e2e", "*.md")
+    e2e_test_files = glob.glob(e2e_pattern)
+    logger.info(f"Found {len(e2e_test_files)} E2E test files in {e2e_pattern}")
 
     if not e2e_test_files:
-        logger.warning("No E2E test files found in .claude/commands/e2e/")
+        logger.warning(f"No E2E test files found in {e2e_pattern}")
         return []
 
     results = []
