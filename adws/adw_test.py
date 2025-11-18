@@ -29,6 +29,13 @@ import os
 import logging
 from typing import Tuple, Optional, List
 from dotenv import load_dotenv
+
+# Force UTF-8 encoding on Windows to handle emojis and Unicode characters
+if sys.platform == 'win32':
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 from adw_modules.data_types import (
     AgentTemplateRequest,
     GitHubIssue,

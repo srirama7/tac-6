@@ -136,7 +136,7 @@ def generate_sql_with_gemini(query_text: str, schema_info: Dict[str, Any]) -> st
 
         # Configure Gemini
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-pro')
 
         # Format schema for prompt
         schema_description = format_schema_for_prompt(schema_info)

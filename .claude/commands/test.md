@@ -53,7 +53,7 @@ TEST_COMMAND_TIMEOUT: 5 minutes
 
 3. **All Backend Tests**
    - Preparation Command: None
-   - Command: `cd app/server && uv run pytest tests/ -v --tb=short`
+   - Command: `cd app/server && uv run --with pytest python -m pytest tests/ -v --tb=short`
    - test_name: "all_backend_tests"
    - test_purpose: "Validates all backend functionality including file processing, SQL security, LLM integration, and API endpoints"
 
@@ -108,7 +108,7 @@ TEST_COMMAND_TIMEOUT: 5 minutes
   {
     "test_name": "all_backend_tests",
     "passed": true,
-    "execution_command": "cd app/server && uv run pytest tests/ -v --tb=short",
+    "execution_command": "cd app/server && uv run --with pytest python -m pytest tests/ -v --tb=short",
     "test_purpose": "Validates all backend functionality including file processing, SQL security, LLM integration, and API endpoints"
   }
 ]
