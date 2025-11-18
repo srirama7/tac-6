@@ -24,6 +24,13 @@ import subprocess
 from typing import Optional
 from dotenv import load_dotenv
 
+# Force UTF-8 encoding on Windows to handle emojis and Unicode characters
+if sys.platform == 'win32':
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 from adw_modules.state import ADWState
 from adw_modules.git_ops import commit_changes, finalize_git_operations, get_current_branch
 from adw_modules.github import fetch_issue, make_issue_comment, get_repo_url, extract_repo_path

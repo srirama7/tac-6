@@ -275,8 +275,26 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
 
 def execute_template(request: AgentTemplateRequest) -> AgentPromptResponse:
     """Execute a Claude Code template with slash command and arguments."""
-    # Construct prompt from slash command and args
-    prompt = f"{request.slash_command} {' '.join(request.args)}"
+    # Check if slash_command is a custom command that needs to be loaded from file
+    if request.slash_command.startswith("/"):
+        # Get project root and check for slash command file
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        command_name = request.slash_command[1:]  # Remove leading slash
+        command_file = os.path.join(project_root, ".claude", "commands", f"{command_name}.md")
+
+        if os.path.exists(command_file):
+            # Read the command file content and use it as the prompt
+            with open(command_file, "r", encoding='utf-8') as f:
+                prompt = f.read()
+            # Append args if any
+            if request.args:
+                prompt += "\n\n" + " ".join(request.args)
+        else:
+            # Slash command file doesn't exist, use as-is (might be a built-in command)
+            prompt = f"{request.slash_command} {' '.join(request.args)}"
+    else:
+        # Not a slash command, use as-is
+        prompt = f"{request.slash_command} {' '.join(request.args)}"
 
     # Create output directory with adw_id at project root
     # __file__ is in adws/adw_modules/, so we need to go up 3 levels to get to project root
