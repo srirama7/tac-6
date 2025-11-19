@@ -32,7 +32,6 @@ graph TD
         P1[Generate ID<br/>a1b2c3d4]
         P3[Run adw_plan.py<br/>Orchestrate Planning]
         P4[Prepare Branch<br/>Info]
-        P5[Save Plan<br/>to State]
         P6[Run adw_build.py<br/>Orchestrate Build]
         P8[Run adw_test.py<br/>Orchestrate Testing]
         P10[Retry Logic<br/>4x Unit, 2x E2E]
@@ -67,9 +66,8 @@ graph TD
     P4 --> GT1
     GT1 --> C3
     C3 --> C4
-    C4 --> P5
+    C4 --> GT3
 
-    P5 --> GT3
     GT3 --> P6
     P6 --> C5
 
@@ -107,7 +105,7 @@ graph TD
     class H1,H3,H4 humanStyle
     class G1,G8,G9 githubStyle
     class GT1,GT3,GT5,GT7 gitStyle
-    class P1,P3,P4,P5,P6,P8,P10,P11 pythonStyle
+    class P1,P3,P4,P6,P8,P10,P11 pythonStyle
     class C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11 claudeStyle
 ```
 

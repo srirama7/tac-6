@@ -28,7 +28,6 @@ graph TB
         A2[Initialize State File<br/>adw_state.json]
         A3[Run adw_plan.py<br/>Orchestrate Planning]
         A4[Create Git Branch]
-        A5[Save Plan to State]
         A7[Run adw_build.py<br/>Orchestrate Build]
         A10[Run adw_test.py<br/>Orchestrate Tests]
         A12[Retry Failed Tests<br/>Up to 4x unit, 2x E2E]
@@ -65,8 +64,7 @@ graph TB
     A3 --> A4
     A4 --> C3
     C3 --> C4
-    C4 --> A5
-    A5 --> A7
+    C4 --> A7
 
     %% Phase 2: Building
     A7 --> C5
@@ -105,7 +103,6 @@ graph TB
     style A2 fill:#F0E68C
     style A3 fill:#DDA0DD
     style A4 fill:#DDA0DD
-    style A5 fill:#DDA0DD
     style A7 fill:#F0E68C
     style A10 fill:#FFB6C1
     style A12 fill:#FFB6C1
