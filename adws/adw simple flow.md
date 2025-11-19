@@ -17,7 +17,6 @@ graph TD
 
     subgraph GITHUB["🌐 GITHUB"]
         G1[Issue Stored<br/>#123]
-        G7[Store Code<br/>Implementation]
         G8[Store Test<br/>Results]
         G9[PR Ready for<br/>Review]
     end
@@ -26,7 +25,6 @@ graph TD
         GT1[Create Branch<br/>feat-issue-123]
         GT3[Commit Plan<br/>specs/*.md]
         GT5[Commit Code<br/>Implementation]
-        GT6[Push Code<br/>to Remote]
         GT7[Commit Tests<br/>Results & Fixes]
     end
 
@@ -79,9 +77,7 @@ graph TD
     C6 --> C7
     C7 --> GT5
 
-    GT5 --> GT6
-    GT6 --> G7
-    G7 --> P8
+    GT5 --> P8
 
     P8 --> C8
     C8 --> P10
@@ -109,8 +105,8 @@ graph TD
     classDef claudeStyle fill:#DDA0DD,stroke:#9370DB,stroke-width:2px,color:#000
 
     class H1,H3,H4 humanStyle
-    class G1,G7,G8,G9 githubStyle
-    class GT1,GT3,GT5,GT6,GT7 gitStyle
+    class G1,G8,G9 githubStyle
+    class GT1,GT3,GT5,GT7 gitStyle
     class P1,P3,P4,P5,P6,P8,P10,P11 pythonStyle
     class C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11 claudeStyle
 ```

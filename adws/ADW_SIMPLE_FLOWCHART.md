@@ -19,7 +19,6 @@ graph TB
     subgraph GitHub[" GITHUB "]
         G1[Store Issue #123<br/>Title & Description]
         G2[Send Webhook Event]
-        G7[Store Implementation<br/>Code Changes]
         G8[Update PR with<br/>Test Results]
         G9[Display PR for Review]
     end
@@ -31,7 +30,6 @@ graph TB
         A4[Create Git Branch]
         A5[Save Plan to State]
         A7[Run adw_build.py<br/>Orchestrate Build]
-        A9[Commit & Push Code]
         A10[Run adw_test.py<br/>Orchestrate Tests]
         A12[Retry Failed Tests<br/>Up to 4x unit, 2x E2E]
         A13[Commit & Push Results]
@@ -74,11 +72,9 @@ graph TB
     A7 --> C5
     C5 --> C6
     C6 --> C7
-    C7 --> A9
-    A9 --> G7
+    C7 --> A10
 
     %% Phase 3: Testing
-    G7 --> A10
     A10 --> C8
     C8 --> A12
     A12 --> C9
@@ -102,7 +98,6 @@ graph TB
 
     style G1 fill:#87CEEB
     style G2 fill:#87CEEB
-    style G7 fill:#87CEEB
     style G8 fill:#87CEEB
     style G9 fill:#87CEEB
 
@@ -112,7 +107,6 @@ graph TB
     style A4 fill:#DDA0DD
     style A5 fill:#DDA0DD
     style A7 fill:#F0E68C
-    style A9 fill:#F0E68C
     style A10 fill:#FFB6C1
     style A12 fill:#FFB6C1
     style A13 fill:#FFB6C1
