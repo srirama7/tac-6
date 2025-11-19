@@ -29,7 +29,6 @@ graph TD
         GT1[Create Branch<br/>feat-issue-123]
         GT2[Checkout Branch<br/>feat-issue-123]
         GT3[Commit Plan<br/>specs/*.md]
-        GT4[Push Plan<br/>to Remote]
         GT5[Commit Code<br/>Implementation]
         GT6[Push Code<br/>to Remote]
         GT7[Commit Tests<br/>Results & Fixes]
@@ -80,8 +79,7 @@ graph TD
     C4 --> P5
 
     P5 --> GT3
-    GT3 --> GT4
-    GT4 --> G4
+    GT3 --> G4
     G4 --> G5
     G5 --> G6
 
@@ -128,7 +126,7 @@ graph TD
 
     class H1,H3,H4 humanStyle
     class G1,G4,G5,G6,G7,G8,G9 githubStyle
-    class GT1,GT2,GT3,GT4,GT5,GT6,GT7,GT8 gitStyle
+    class GT1,GT2,GT3,GT5,GT6,GT7,GT8 gitStyle
     class P1,P3,P4,P5,P6,P7,P8,P9,P10,P11 pythonStyle
     class C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11 claudeStyle
 ```

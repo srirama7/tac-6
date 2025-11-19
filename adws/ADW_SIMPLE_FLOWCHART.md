@@ -33,7 +33,6 @@ graph TB
         A3[Run adw_plan.py<br/>Orchestrate Planning]
         A4[Create Git Branch]
         A5[Save Plan to State]
-        A6[Commit & Push Plan]
         A7[Run adw_build.py<br/>Orchestrate Build]
         A8[Load State & Checkout]
         A9[Commit & Push Code]
@@ -74,8 +73,7 @@ graph TB
     A4 --> C3
     C3 --> C4
     C4 --> A5
-    A5 --> A6
-    A6 --> G4
+    A5 --> G4
     G4 --> G5
     G5 --> G6
 
@@ -127,7 +125,6 @@ graph TB
     style A3 fill:#DDA0DD
     style A4 fill:#DDA0DD
     style A5 fill:#DDA0DD
-    style A6 fill:#DDA0DD
     style A7 fill:#F0E68C
     style A8 fill:#F0E68C
     style A9 fill:#F0E68C
