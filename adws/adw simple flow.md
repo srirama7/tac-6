@@ -10,7 +10,7 @@ This diagram shows the workflow across five swim lanes representing Human, GitHu
 ```mermaid
 graph TD
     subgraph HUMAN["👤 HUMAN"]
-        H1[Create GitHub Issue<br/>Feature/Bug/Chore]
+        H1[Create GitHub Issue]
         H3[Review PR]
         H4[Merge Changes]
     end
