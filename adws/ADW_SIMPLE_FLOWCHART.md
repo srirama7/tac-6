@@ -20,8 +20,6 @@ graph TB
         G1[Store Issue #123<br/>Title & Description]
         G2[Send Webhook Event]
         G4[Receive Branch<br/>feat-issue-123-adw-a1b2c3d4]
-        G5[Store Plan File<br/>specs/*.md]
-        G6[Create Pull Request]
         G7[Store Implementation<br/>Code Changes]
         G8[Update PR with<br/>Test Results]
         G9[Display PR for Review]
@@ -74,11 +72,9 @@ graph TB
     C3 --> C4
     C4 --> A5
     A5 --> G4
-    G4 --> G5
-    G5 --> G6
+    G4 --> A7
 
     %% Phase 2: Building
-    G6 --> A7
     A7 --> A8
     A8 --> C5
     C5 --> C6
@@ -114,8 +110,6 @@ graph TB
     style G1 fill:#87CEEB
     style G2 fill:#87CEEB
     style G4 fill:#87CEEB
-    style G5 fill:#87CEEB
-    style G6 fill:#87CEEB
     style G7 fill:#87CEEB
     style G8 fill:#87CEEB
     style G9 fill:#87CEEB
