@@ -25,12 +25,10 @@ graph TD
 
     subgraph GIT["📂 GIT"]
         GT1[Create Branch<br/>feat-issue-123]
-        GT2[Checkout Branch<br/>feat-issue-123]
         GT3[Commit Plan<br/>specs/*.md]
         GT5[Commit Code<br/>Implementation]
         GT6[Push Code<br/>to Remote]
         GT7[Commit Tests<br/>Results & Fixes]
-        GT8[Push Tests<br/>to Remote]
     end
 
     subgraph PYTHON["🐍 ADW PYTHON"]
@@ -39,9 +37,7 @@ graph TD
         P4[Prepare Branch<br/>Info]
         P5[Save Plan<br/>to State]
         P6[Run adw_build.py<br/>Orchestrate Build]
-        P7[Load State]
         P8[Run adw_test.py<br/>Orchestrate Testing]
-        P9[Parse Test<br/>Results]
         P10[Retry Logic<br/>4x Unit, 2x E2E]
         P11[Update PR<br/>Status]
     end
@@ -79,9 +75,7 @@ graph TD
     P5 --> GT3
     GT3 --> G4
     G4 --> P6
-    P6 --> P7
-    P7 --> GT2
-    GT2 --> C5
+    P6 --> C5
 
     C5 --> C6
     C6 --> C7
@@ -92,21 +86,18 @@ graph TD
     G7 --> P8
 
     P8 --> C8
-    C8 --> P9
-    P9 --> P10
+    C8 --> P10
 
     P10 --> C9
     C9 --> P10
     P10 --> C10
 
-    C10 --> P9
-    P9 --> P10
+    C10 --> P10
     P10 --> C11
     C11 --> P10
 
     P10 --> GT7
-    GT7 --> GT8
-    GT8 --> G8
+    GT7 --> G8
     G8 --> P11
 
     P11 --> G9
@@ -121,8 +112,8 @@ graph TD
 
     class H1,H3,H4 humanStyle
     class G1,G4,G7,G8,G9 githubStyle
-    class GT1,GT2,GT3,GT5,GT6,GT7,GT8 gitStyle
-    class P1,P3,P4,P5,P6,P7,P8,P9,P10,P11 pythonStyle
+    class GT1,GT3,GT5,GT6,GT7 gitStyle
+    class P1,P3,P4,P5,P6,P8,P10,P11 pythonStyle
     class C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11 claudeStyle
 ```
 
