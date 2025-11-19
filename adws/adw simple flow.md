@@ -17,7 +17,6 @@ graph TD
 
     subgraph GITHUB["🌐 GITHUB"]
         G1[Issue Stored<br/>#123]
-        G4[Store Branch<br/>feat-issue-123-adw-xyz]
         G7[Store Code<br/>Implementation]
         G8[Store Test<br/>Results]
         G9[PR Ready for<br/>Review]
@@ -73,8 +72,7 @@ graph TD
     C4 --> P5
 
     P5 --> GT3
-    GT3 --> G4
-    G4 --> P6
+    GT3 --> P6
     P6 --> C5
 
     C5 --> C6
@@ -111,7 +109,7 @@ graph TD
     classDef claudeStyle fill:#DDA0DD,stroke:#9370DB,stroke-width:2px,color:#000
 
     class H1,H3,H4 humanStyle
-    class G1,G4,G7,G8,G9 githubStyle
+    class G1,G7,G8,G9 githubStyle
     class GT1,GT3,GT5,GT6,GT7 gitStyle
     class P1,P3,P4,P5,P6,P8,P10,P11 pythonStyle
     class C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11 claudeStyle
