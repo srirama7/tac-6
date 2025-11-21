@@ -145,6 +145,17 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.appendChild(table);
   }
   
+  // Add download button for results
+  const resultsHeader = document.querySelector(".results-header") as HTMLElement;
+  if (response.results.length > 0 && !response.error) {
+    const downloadBtn = document.createElement("button");
+    downloadBtn.className = "download-results-button";
+    downloadBtn.innerHTML = "{1F4E5} Download";
+    downloadBtn.onclick = () => downloadQueryResults(response.columns, response.results);
+    const toggleBtn = document.getElementById("toggle-results");
+    if (toggleBtn) resultsHeader.insertBefore(downloadBtn, toggleBtn);
+  }
+
   // Initialize toggle button
   const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
   toggleButton.addEventListener('click', () => {
@@ -220,13 +231,20 @@ function displayTables(tables: TableSchema[]) {
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
     
-    const removeButton = document.createElement('button');
+    const downloadButton = document.createElement("button");
+    downloadButton.className = "download-table-button";
+    downloadButton.innerHTML = "{1F4E5}";
+    downloadButton.title = "Download table as CSV";
+    downloadButton.onclick = () => downloadTable(table.name);
+
+    const removeButton = document.createElement("button");
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
     
     tableHeader.appendChild(tableLeft);
+    tableHeader.appendChild(downloadButton);
     tableHeader.appendChild(removeButton);
     
     // Columns section
@@ -418,5 +436,47 @@ async function loadSampleData(sampleType: string) {
     await handleFileUpload(file);
   } catch (error) {
     displayError(error instanceof Error ? error.message : 'Failed to load sample data');
+  }
+}
+
+// Download table as CSV
+async function downloadTable(tableName: string) {
+  try {
+    const response = await fetch(`/api/table/${tableName}/export`);
+    if (!response.ok) throw new Error('Failed to export table');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `table_${tableName}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to download table');
+  }
+}
+
+// Download query results as CSV
+async function downloadQueryResults(columns: string[], results: any[]) {
+  try {
+    const response = await fetch('/api/query/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ columns, results, filename: 'query_results' })
+    });
+    if (!response.ok) throw new Error('Failed to export results');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'query_results.csv';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to download results');
   }
 }

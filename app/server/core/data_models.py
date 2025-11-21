@@ -80,3 +80,8 @@ class HealthCheckResponse(BaseModel):
     tables_count: int
     version: str = "1.0.0"
     uptime_seconds: float
+# Export Models
+class QueryExportRequest(BaseModel):
+    columns: List[str]
+    results: List[Dict[str, Any]]
+    filename: Optional[str] = "query_results"
