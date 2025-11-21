@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from datetime import datetime
 import os
 import sqlite3
@@ -7,11 +8,14 @@ import traceback
 from dotenv import load_dotenv
 import logging
 import sys
+import csv
+import io
 
 from core.data_models import (
     FileUploadResponse,
     QueryRequest,
     QueryResponse,
+    QueryExportRequest,
     DatabaseSchemaResponse,
     InsightsRequest,
     InsightsResponse,
@@ -22,7 +26,7 @@ from core.data_models import (
 )
 from core.file_processor import convert_csv_to_sqlite, convert_json_to_sqlite, convert_jsonl_to_sqlite
 from core.llm_processor import generate_sql, generate_random_query
-from core.sql_processor import execute_sql_safely, get_database_schema
+from core.sql_processor import execute_sql_safely, get_database_schema, DB_PATH
 from core.insights import generate_insights
 from core.sql_security import (
     execute_query_safely,
@@ -241,7 +245,7 @@ async def health_check() -> HealthCheckResponse:
     """Health check endpoint with database status"""
     try:
         # Check database connection
-        conn = sqlite3.connect("db/database.db")
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = cursor.fetchall()
@@ -276,14 +280,14 @@ async def delete_table(table_name: str):
             validate_identifier(table_name, "table")
         except SQLSecurityError as e:
             raise HTTPException(400, str(e))
-        
-        conn = sqlite3.connect("db/database.db")
-        
+
+        conn = sqlite3.connect(DB_PATH)
+
         # Check if table exists using secure method
         if not check_table_exists(conn, table_name):
             conn.close()
             raise HTTPException(404, f"Table '{table_name}' not found")
-        
+
         # Drop the table using safe query execution with DDL permission
         execute_query_safely(
             conn,
@@ -293,7 +297,7 @@ async def delete_table(table_name: str):
         )
         conn.commit()
         conn.close()
-        
+
         response = {"message": f"Table '{table_name}' deleted successfully"}
         logger.info(f"[SUCCESS] Table deleted: {table_name}")
         return response
@@ -303,6 +307,106 @@ async def delete_table(table_name: str):
         logger.error(f"[ERROR] Table deletion failed: {str(e)}")
         logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(500, f"Error deleting table: {str(e)}")
+
+@app.get("/api/table/{table_name}/export")
+async def export_table_csv(table_name: str):
+    """Export entire table as CSV file"""
+    try:
+        # Validate table name using security module
+        try:
+            validate_identifier(table_name, "table")
+        except SQLSecurityError as e:
+            raise HTTPException(400, str(e))
+
+        conn = sqlite3.connect(DB_PATH)
+
+        # Check if table exists using secure method
+        if not check_table_exists(conn, table_name):
+            conn.close()
+            raise HTTPException(404, f"Table '{table_name}' not found")
+
+        # Fetch all data from table using safe query execution
+        conn.row_factory = sqlite3.Row
+        cursor = execute_query_safely(
+            conn,
+            "SELECT * FROM {table}",
+            identifier_params={'table': table_name}
+        )
+
+        # Get results
+        rows = cursor.fetchall()
+        columns = []
+        results = []
+
+        if rows:
+            columns = list(rows[0].keys())
+            results = [dict(row) for row in rows]
+
+        conn.close()
+
+        # Generate CSV content
+        output = io.StringIO()
+        if columns and results:
+            writer = csv.DictWriter(output, fieldnames=columns)
+            writer.writeheader()
+            writer.writerows(results)
+
+        csv_content = output.getvalue()
+        output.close()
+
+        # Create streaming response
+        response = StreamingResponse(
+            io.StringIO(csv_content),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=table_{table_name}.csv"
+            }
+        )
+
+        logger.info(f"[SUCCESS] Table exported: {table_name}, rows={len(results)}")
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ERROR] Table export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Error exporting table: {str(e)}")
+
+@app.post("/api/query/export")
+async def export_query_results_csv(request: QueryExportRequest):
+    """Export query results as CSV file"""
+    try:
+        # Validate input
+        if not request.columns or not request.results:
+            raise HTTPException(400, "Columns and results are required")
+
+        # Generate CSV content
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=request.columns)
+        writer.writeheader()
+        writer.writerows(request.results)
+
+        csv_content = output.getvalue()
+        output.close()
+
+        # Create streaming response
+        filename = f"{request.filename}.csv" if request.filename else "query_results.csv"
+        response = StreamingResponse(
+            io.StringIO(csv_content),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+
+        logger.info(f"[SUCCESS] Query results exported: {filename}, rows={len(request.results)}")
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ERROR] Query export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Error exporting query results: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

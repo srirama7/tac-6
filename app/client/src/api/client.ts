@@ -80,5 +80,35 @@ export const api = {
   // Generate random query
   async generateRandomQuery(): Promise<RandomQueryResponse> {
     return apiRequest<RandomQueryResponse>('/generate-random-query');
+  },
+
+  // Export table as CSV
+  async exportTable(tableName: string): Promise<Blob> {
+    const url = `${API_BASE_URL}/table/${tableName}/export`;
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.blob();
+  },
+
+  // Export query results as CSV
+  async exportQueryResults(columns: string[], results: any[], filename: string = 'query_results'): Promise<Blob> {
+    const url = `${API_BASE_URL}/query/export`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ columns, results, filename })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.blob();
   }
 };

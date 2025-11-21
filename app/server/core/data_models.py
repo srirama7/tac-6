@@ -28,6 +28,12 @@ class QueryResponse(BaseModel):
     execution_time_ms: float
     error: Optional[str] = None
 
+# CSV Export Models
+class QueryExportRequest(BaseModel):
+    columns: List[str]
+    results: List[Dict[str, Any]]
+    filename: Optional[str] = "query_results"
+
 # Database Schema Models
 class ColumnInfo(BaseModel):
     name: str

@@ -182,13 +182,14 @@ async function loadDatabaseSchema() {
 
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
+
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+  const resultsHeader = resultsSection.querySelector('.results-header') as HTMLDivElement;
+
   resultsSection.style.display = 'block';
-  
+
   // Display natural language query and SQL
   sqlDisplay.innerHTML = `
     <div class="query-display">
@@ -198,7 +199,7 @@ function displayResults(response: QueryResponse, query: string) {
       <strong>SQL:</strong> <code>${response.sql}</code>
     </div>
   `;
-  
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
@@ -209,13 +210,30 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
+
+  // Add download button if results exist
+  const existingDownloadButton = resultsHeader.querySelector('.download-results-button');
+  if (existingDownloadButton) {
+    existingDownloadButton.remove();
+  }
+
+  if (!response.error && response.results.length > 0) {
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-results-button secondary-button';
+    downloadButton.innerHTML = '📥 Download CSV';
+    downloadButton.title = 'Download results as CSV';
+    downloadButton.onclick = () => downloadQueryResults(response.columns, response.results);
+
+    const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
+    resultsHeader.insertBefore(downloadButton, toggleButton);
+  }
+
   // Initialize toggle button
   const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
-  toggleButton.addEventListener('click', () => {
+  toggleButton.onclick = () => {
     resultsContainer.style.display = resultsContainer.style.display === 'none' ? 'block' : 'none';
     toggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
-  });
+  };
 }
 
 // Create results table
@@ -284,15 +302,29 @@ function displayTables(tables: TableSchema[]) {
     
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
-    
+
+    const buttonGroup = document.createElement('div');
+    buttonGroup.style.display = 'flex';
+    buttonGroup.style.gap = '0.5rem';
+    buttonGroup.style.alignItems = 'center';
+
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-table-button';
+    downloadButton.innerHTML = '📥';
+    downloadButton.title = 'Download table as CSV';
+    downloadButton.onclick = () => downloadTable(table.name);
+
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
+    buttonGroup.appendChild(downloadButton);
+    buttonGroup.appendChild(removeButton);
+
     tableHeader.appendChild(tableLeft);
-    tableHeader.appendChild(removeButton);
+    tableHeader.appendChild(buttonGroup);
     
     // Columns section
     const tableColumns = document.createElement('div');
@@ -459,7 +491,7 @@ function getTypeEmoji(type: string): string {
 async function loadSampleData(sampleType: string) {
   try {
     let filename: string;
-    
+
     if (sampleType === 'users') {
       filename = 'users.json';
     } else if (sampleType === 'products') {
@@ -469,19 +501,53 @@ async function loadSampleData(sampleType: string) {
     } else {
       throw new Error(`Unknown sample type: ${sampleType}`);
     }
-    
+
     const response = await fetch(`/sample-data/${filename}`);
-    
+
     if (!response.ok) {
       throw new Error('Failed to load sample data');
     }
-    
+
     const blob = await response.blob();
     const file = new File([blob], filename, { type: blob.type });
-    
+
     // Upload the file
     await handleFileUpload(file);
   } catch (error) {
     displayError(error instanceof Error ? error.message : 'Failed to load sample data');
   }
+}
+
+// Download query results as CSV
+async function downloadQueryResults(columns: string[], results: any[]) {
+  try {
+    const blob = await api.exportQueryResults(columns, results, 'query_results');
+    triggerDownload(blob, 'query_results.csv');
+  } catch (error) {
+    console.error('Failed to download query results:', error);
+    displayError(error instanceof Error ? error.message : 'Failed to download query results');
+  }
+}
+
+// Download table as CSV
+async function downloadTable(tableName: string) {
+  try {
+    const blob = await api.exportTable(tableName);
+    triggerDownload(blob, `table_${tableName}.csv`);
+  } catch (error) {
+    console.error('Failed to download table:', error);
+    displayError(error instanceof Error ? error.message : 'Failed to download table');
+  }
+}
+
+// Trigger browser download
+function triggerDownload(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 }
