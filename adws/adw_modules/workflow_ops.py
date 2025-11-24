@@ -9,6 +9,7 @@ import json
 import logging
 import subprocess
 import re
+import os
 from typing import Tuple, Optional
 from adw_modules.data_types import (
     AgentTemplateRequest,
@@ -16,7 +17,12 @@ from adw_modules.data_types import (
     AgentPromptResponse,
     IssueClassSlashCommand,
 )
-from adw_modules.agent import execute_template
+# Use Claude Code agent for ADW workflow operations
+# Claude Code will use local authentication from the current session
+from adw_modules import agent as agent_module
+
+execute_template = agent_module.execute_template
+
 from adw_modules.github import get_repo_url, extract_repo_path
 from adw_modules.state import ADWState
 from adw_modules.utils import parse_json
@@ -87,14 +93,16 @@ def classify_issue(
 ) -> Tuple[Optional[IssueClassSlashCommand], Optional[str]]:
     """Classify GitHub issue and return appropriate slash command.
     Returns (command, error_message) tuple."""
-    
+
     # Use the classify_issue slash command template with minimal payload
     # Only include the essential fields: number, title, body
-    minimal_issue_json = issue.model_dump_json(
-        by_alias=True, 
-        include={"number", "title", "body"}
+    # Use ensure_ascii=True to avoid Unicode encoding issues on Windows command line
+    # Use mode='json' to ensure datetime objects are serialized as strings
+    minimal_issue_json = json.dumps(
+        issue.model_dump(by_alias=True, include={"number", "title", "body"}, mode='json'),
+        ensure_ascii=True
     )
-    
+
     request = AgentTemplateRequest(
         agent_name=AGENT_CLASSIFIER,
         slash_command="/classify_issue",
@@ -102,34 +110,35 @@ def classify_issue(
         adw_id=adw_id,
         model="sonnet",
     )
-    
+
     logger.debug(f"Classifying issue: {issue.title}")
-    
+
     response = execute_template(request)
-    
+
     logger.debug(f"Classification response: {response.model_dump_json(indent=2, by_alias=True)}")
-    
+
     if not response.success:
         return None, response.output
-    
+
     # Extract the classification from the response
     output = response.output.strip()
-    
+
     # Look for the classification pattern in the output
     # Claude might add explanation, so we need to extract just the command
     classification_match = re.search(r'(/chore|/bug|/feature|0)', output)
-    
+
     if classification_match:
         issue_command = classification_match.group(1)
     else:
         issue_command = output
-    
+
     if issue_command == "0":
         return None, f"No command selected: {response.output}"
-    
+
     if issue_command not in ["/chore", "/bug", "/feature"]:
         return None, f"Invalid command selected: {response.output}"
-    
+
+    logger.info(f"Classified issue as: {issue_command}")
     return issue_command, None  # type: ignore
 
 
@@ -139,10 +148,13 @@ def build_plan(
     issue: GitHubIssue, command: str, adw_id: str, logger: logging.Logger
 ) -> AgentPromptResponse:
     """Build implementation plan for the issue using the specified command."""
+    # Use ensure_ascii=True to avoid Unicode encoding issues on Windows command line
+    # Use mode='json' to ensure datetime objects are serialized as strings
+    issue_json = json.dumps(issue.model_dump(by_alias=True, mode='json'), ensure_ascii=True)
     issue_plan_template_request = AgentTemplateRequest(
         agent_name=AGENT_PLANNER,
         slash_command=command,
-        args=[str(issue.number), adw_id, issue.model_dump_json(by_alias=True)],
+        args=[str(issue.number), adw_id, issue_json],
         adw_id=adw_id,
         model="sonnet",
     )
@@ -227,10 +239,13 @@ def generate_branch_name(
     # Remove the leading slash from issue_class for the branch name
     issue_type = issue_class.replace("/", "")
 
+    # Use ensure_ascii=True to avoid Unicode encoding issues on Windows command line
+    # Use mode='json' to ensure datetime objects are serialized as strings
+    issue_json = json.dumps(issue.model_dump(by_alias=True, mode='json'), ensure_ascii=True)
     request = AgentTemplateRequest(
         agent_name=AGENT_BRANCH_GENERATOR,
         slash_command="/generate_branch_name",
-        args=[issue_type, adw_id, issue.model_dump_json(by_alias=True)],
+        args=[issue_type, adw_id, issue_json],
         adw_id=adw_id,
         model="sonnet",
     )
@@ -260,10 +275,13 @@ def create_commit(
     # Create unique committer agent name by suffixing '_committer'
     unique_agent_name = f"{agent_name}_committer"
 
+    # Use ensure_ascii=True to avoid Unicode encoding issues on Windows command line
+    # Use mode='json' to ensure datetime objects are serialized as strings
+    issue_json = json.dumps(issue.model_dump(by_alias=True, mode='json'), ensure_ascii=True)
     request = AgentTemplateRequest(
         agent_name=unique_agent_name,
         slash_command="/commit",
-        args=[agent_name, issue_type, issue.model_dump_json(by_alias=True)],
+        args=[agent_name, issue_type, issue_json],
         adw_id=adw_id,
         model="sonnet",
     )
@@ -292,20 +310,22 @@ def create_pull_request(
     adw_id = state.get("adw_id")
     
     # If we don't have issue data, try to construct minimal data
+    # Use ensure_ascii=True to avoid Unicode encoding issues on Windows command line
+    # Use mode='json' to ensure datetime objects are serialized as strings
     if not issue:
         issue_data = state.get("issue", {})
-        issue_json = json.dumps(issue_data) if issue_data else "{}"
+        issue_json = json.dumps(issue_data, ensure_ascii=True) if issue_data else "{}"
     elif isinstance(issue, dict):
         # Try to reconstruct as GitHubIssue model which handles datetime serialization
         from adw_modules.data_types import GitHubIssue
         try:
             issue_model = GitHubIssue(**issue)
-            issue_json = issue_model.model_dump_json(by_alias=True)
+            issue_json = json.dumps(issue_model.model_dump(by_alias=True, mode='json'), ensure_ascii=True)
         except Exception:
             # Fallback: use json.dumps with default str converter for datetime
-            issue_json = json.dumps(issue, default=str)
+            issue_json = json.dumps(issue, default=str, ensure_ascii=True)
     else:
-        issue_json = issue.model_dump_json(by_alias=True)
+        issue_json = json.dumps(issue.model_dump(by_alias=True, mode='json'), ensure_ascii=True)
     
     request = AgentTemplateRequest(
         agent_name=AGENT_PR_CREATOR,

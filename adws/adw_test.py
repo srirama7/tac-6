@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# dependencies = ["python-dotenv", "pydantic"]
+# dependencies = ["python-dotenv", "pydantic", "google-generativeai"]
 # ///
 
 """
@@ -17,8 +17,8 @@ Workflow:
 5. Push and update PR
 
 Environment Requirements:
-- ANTHROPIC_API_KEY: Anthropic API key
 - CLAUDE_CODE_PATH: Path to Claude CLI
+- ANTHROPIC_API_KEY: (Optional) Anthropic API key - Claude Code will use its own auth if not set
 - GITHUB_PAT: (Optional) GitHub Personal Access Token - only if using a different account than 'gh auth login'
 """
 
@@ -62,8 +62,8 @@ MAX_E2E_TEST_RETRY_ATTEMPTS = 2  # E2E ui tests
 
 def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
     """Check that all required environment variables are set."""
+    # Note: ANTHROPIC_API_KEY is not required - Claude Code will use its own auth if not set
     required_vars = [
-        "ANTHROPIC_API_KEY",
         "CLAUDE_CODE_PATH",
     ]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
@@ -79,6 +79,14 @@ def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
             for var in missing_vars:
                 print(f"  - {var}", file=sys.stderr)
         sys.exit(1)
+
+    # Warn if ANTHROPIC_API_KEY is not set (but don't fail)
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        warning_msg = "Note: ANTHROPIC_API_KEY not set - Claude Code will use its own authentication"
+        if logger:
+            logger.info(warning_msg)
+        else:
+            print(warning_msg)
 
 
 def parse_args(

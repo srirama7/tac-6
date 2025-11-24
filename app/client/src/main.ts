@@ -2,6 +2,7 @@ import './style.css'
 import { api } from './api/client'
 
 // Global state
+let currentQueryResults: { columns: string[], results: Record<string, any>[] } | null = null;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -117,23 +118,43 @@ async function loadDatabaseSchema() {
 
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
+
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+
   resultsSection.style.display = 'block';
-  
-  // Display natural language query and SQL
+
+  // Store current results for export
+  if (!response.error && response.results.length > 0) {
+    currentQueryResults = { columns: response.columns, results: response.results };
+  } else {
+    currentQueryResults = null;
+  }
+
+  // Display natural language query and SQL with export button
+  const exportButtonHtml = (!response.error && response.results.length > 0)
+    ? '<button id="export-results-button" class="export-button" title="Export as CSV">⬇ Export Results</button>'
+    : '';
+
   sqlDisplay.innerHTML = `
     <div class="query-display">
       <strong>Query:</strong> ${query}
     </div>
     <div class="sql-query">
       <strong>SQL:</strong> <code>${response.sql}</code>
+      ${exportButtonHtml}
     </div>
   `;
-  
+
+  // Attach export button handler if it exists
+  if (!response.error && response.results.length > 0) {
+    const exportBtn = document.getElementById('export-results-button');
+    if (exportBtn) {
+      exportBtn.onclick = () => exportQueryResults();
+    }
+  }
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
@@ -144,7 +165,7 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
+
   // Initialize toggle button
   const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
   toggleButton.addEventListener('click', () => {
@@ -220,14 +241,27 @@ function displayTables(tables: TableSchema[]) {
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
     
+    const buttonGroup = document.createElement('div');
+    buttonGroup.style.display = 'flex';
+    buttonGroup.style.gap = '0.5rem';
+
+    const exportButton = document.createElement('button');
+    exportButton.className = 'export-table-button';
+    exportButton.innerHTML = '⬇';
+    exportButton.title = 'Export as CSV';
+    exportButton.onclick = () => exportTable(table.name);
+
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
+    buttonGroup.appendChild(exportButton);
+    buttonGroup.appendChild(removeButton);
+
     tableHeader.appendChild(tableLeft);
-    tableHeader.appendChild(removeButton);
+    tableHeader.appendChild(buttonGroup);
     
     // Columns section
     const tableColumns = document.createElement('div');
@@ -394,7 +428,7 @@ function getTypeEmoji(type: string): string {
 async function loadSampleData(sampleType: string) {
   try {
     let filename: string;
-    
+
     if (sampleType === 'users') {
       filename = 'users.json';
     } else if (sampleType === 'products') {
@@ -404,19 +438,62 @@ async function loadSampleData(sampleType: string) {
     } else {
       throw new Error(`Unknown sample type: ${sampleType}`);
     }
-    
+
     const response = await fetch(`/sample-data/${filename}`);
-    
+
     if (!response.ok) {
       throw new Error('Failed to load sample data');
     }
-    
+
     const blob = await response.blob();
     const file = new File([blob], filename, { type: blob.type });
-    
+
     // Upload the file
     await handleFileUpload(file);
   } catch (error) {
     displayError(error instanceof Error ? error.message : 'Failed to load sample data');
+  }
+}
+
+// Helper function to download a blob as a file
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Export table as CSV
+async function exportTable(tableName: string) {
+  try {
+    const blob = await api.exportTable(tableName);
+    const filename = `${tableName}.csv`;
+    downloadBlob(blob, filename);
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to export table');
+  }
+}
+
+// Export query results as CSV
+async function exportQueryResults() {
+  if (!currentQueryResults) {
+    displayError('No results to export');
+    return;
+  }
+
+  try {
+    const blob = await api.exportResults(
+      currentQueryResults.columns,
+      currentQueryResults.results
+    );
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const filename = `query_results_${timestamp}.csv`;
+    downloadBlob(blob, filename);
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to export results');
   }
 }

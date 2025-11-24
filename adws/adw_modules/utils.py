@@ -43,13 +43,24 @@ def setup_logger(adw_id: str, trigger_type: str = "adw_plan_build") -> logging.L
     # Clear any existing handlers to avoid duplicates
     logger.handlers.clear()
     
-    # File handler - captures everything
-    file_handler = logging.FileHandler(log_file, mode='a')
+    # File handler - captures everything with UTF-8 encoding
+    file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8', errors='replace')
     file_handler.setLevel(logging.DEBUG)
-    
+
     # Console handler - INFO and above
+    # Note: On Windows, stdout might use cp1252 encoding, so we set UTF-8 with error handling
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
+
+    # Force UTF-8 encoding on Windows console if possible
+    if sys.platform == 'win32':
+        try:
+            # Try to reconfigure stdout to use UTF-8
+            if hasattr(sys.stdout, 'reconfigure'):
+                sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, Exception):
+            # If reconfigure fails, the formatter will handle encoding errors
+            pass
     
     # Format with timestamp for file
     file_formatter = logging.Formatter(

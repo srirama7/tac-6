@@ -45,7 +45,7 @@ def parse_jsonl_output(
         Tuple of (all_messages, result_message) where result_message is None if not found
     """
     try:
-        with open(output_file, "r") as f:
+        with open(output_file, "r", encoding='utf-8', errors='replace') as f:
             # Read all lines and parse each as JSON
             messages = [json.loads(line) for line in f if line.strip()]
 
@@ -78,7 +78,7 @@ def convert_jsonl_to_json(jsonl_file: str) -> str:
     messages, _ = parse_jsonl_output(jsonl_file)
 
     # Write as JSON array
-    with open(json_file, "w") as f:
+    with open(json_file, "w", encoding='utf-8') as f:
         json.dump(messages, f, indent=2)
 
     print(f"Created JSON file: {json_file}")
@@ -105,8 +105,9 @@ def get_claude_env() -> Dict[str, str]:
     result = subprocess.run(cmd, capture_output=True, text=True, env={})
     """
     required_env_vars = {
-        # Anthropic Configuration (required)
-        "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
+        # NOTE: ANTHROPIC_API_KEY is NOT included - Claude Code uses its own auth
+        # from the current session. Do not override with API keys.
+
         # Claude Code Configuration
         "CLAUDE_CODE_PATH": os.getenv("CLAUDE_CODE_PATH", "claude"),
         "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": os.getenv(
@@ -114,6 +115,8 @@ def get_claude_env() -> Dict[str, str]:
         ),
         # Agent Cloud Sandbox Environment (optional)
         "E2B_API_KEY": os.getenv("E2B_API_KEY"),
+        # Gemini API key for SQL operations in the server
+        "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
         # Basic environment variables Claude Code might need
         "HOME": os.getenv("HOME"),
         "USER": os.getenv("USER"),
@@ -151,7 +154,7 @@ def save_prompt(prompt: str, adw_id: str, agent_name: str = "ops") -> None:
 
     # Save prompt to file
     prompt_file = os.path.join(prompt_dir, f"{command_name}.txt")
-    with open(prompt_file, "w") as f:
+    with open(prompt_file, "w", encoding='utf-8') as f:
         f.write(prompt)
 
     print(f"Saved prompt to: {prompt_file}")
@@ -173,25 +176,61 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
-    # Build command - always use stream-json format and verbose
-    cmd = [CLAUDE_PATH, "-p", request.prompt]
-    cmd.extend(["--model", request.model])
-    cmd.extend(["--output-format", "stream-json"])
-    cmd.append("--verbose")
+    # Build command - use --print mode with stream-json format and verbose
+    cmd = [CLAUDE_PATH, "--print", "--model", request.model, "--output-format", "stream-json", "--verbose"]
 
     # Add dangerous skip permissions flag if enabled
     if request.dangerously_skip_permissions:
         cmd.append("--dangerously-skip-permissions")
 
-    # Set up environment with only required variables
-    env = get_claude_env()
+    # Set up environment - inherit parent environment and add necessary variables
+    # Using get_claude_env() creates a filtered environment which may cause issues
+    # Instead, inherit the full parent environment
+    env = os.environ.copy()
+
+    # Add/override only the necessary variables
+    if os.getenv("GEMINI_API_KEY"):
+        env["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY")
+    if os.getenv("GITHUB_PAT"):
+        env["GH_TOKEN"] = os.getenv("GITHUB_PAT")
+
+    # Disable hooks on Windows to avoid compatibility issues with shebangs
+    if sys.platform == 'win32':
+        env["CLAUDE_DISABLE_HOOKS"] = "true"
+
+    # Get project root to ensure Claude Code runs from the correct directory
+    # This is needed so Claude Code can find .claude/commands/ directory
+    # __file__ is adws/adw_modules/agent.py, so we need to go up 2 levels to get to project root
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     try:
-        # Execute Claude Code and pipe output to file
-        with open(request.output_file, "w") as f:
-            result = subprocess.run(
-                cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env
-            )
+        # Execute Claude Code with prompt
+        # Set cwd to project root so Claude Code can find .claude directory
+        process = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            env=env,
+            cwd=project_root
+        )
+        # Send prompt to stdin and get output
+        stdout_data, stderr_data = process.communicate(input=request.prompt)
+
+        # Write output to file
+        with open(request.output_file, "w", encoding='utf-8') as f:
+            f.write(stdout_data)
+
+        # Create a result object that matches subprocess.run() return type
+        class Result:
+            def __init__(self, returncode, stderr):
+                self.returncode = returncode
+                self.stderr = stderr
+
+        result = Result(process.returncode, stderr_data)
 
         if result.returncode == 0:
             print(f"Output saved to: {request.output_file}")
@@ -209,14 +248,14 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
                 # Check if there was an error in the result
                 is_error = result_message.get("is_error", False)
                 subtype = result_message.get("subtype", "")
-                
+
                 # Handle error_during_execution case where there's no result field
                 if subtype == "error_during_execution":
                     error_msg = "Error during execution: Agent encountered an error and did not return a result"
                     return AgentPromptResponse(
                         output=error_msg, success=False, session_id=session_id
                     )
-                
+
                 result_text = result_message.get("result", "")
 
                 return AgentPromptResponse(
@@ -224,13 +263,16 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
                 )
             else:
                 # No result message found, return raw output
-                with open(request.output_file, "r") as f:
+                with open(request.output_file, "r", encoding='utf-8', errors='replace') as f:
                     raw_output = f.read()
                 return AgentPromptResponse(
                     output=raw_output, success=True, session_id=None
                 )
         else:
-            error_msg = f"Claude Code error: {result.stderr}"
+            # Enhanced error message with more details
+            stderr_output = result.stderr if result.stderr else "(no stderr output)"
+            stdout_size = os.path.getsize(request.output_file) if os.path.exists(request.output_file) else 0
+            error_msg = f"Claude Code failed with exit code {result.returncode}. Stderr: {stderr_output}. Output file size: {stdout_size} bytes. Command: {' '.join(cmd)}"
             print(error_msg, file=sys.stderr)
             return AgentPromptResponse(output=error_msg, success=False, session_id=None)
 
