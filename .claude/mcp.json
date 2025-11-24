@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--isolated",
+        "--config",
+        "C:\\Users\\amogh\\Downloads\\tac-6\\tac-6\\playwright-mcp-config.json"
+      ]
+    }
+  }
+}

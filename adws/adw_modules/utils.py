@@ -44,11 +44,16 @@ def setup_logger(adw_id: str, trigger_type: str = "adw_plan_build") -> logging.L
     logger.handlers.clear()
     
     # File handler - captures everything
-    file_handler = logging.FileHandler(log_file, mode='a')
+    # Use UTF-8 encoding to support emojis and unicode characters
+    file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
-    
+
     # Console handler - INFO and above
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Use UTF-8 encoding with 'replace' error handling for Windows compatibility
+    import io
+    # Wrap stdout in a UTF-8 TextIOWrapper to handle unicode properly on Windows
+    console_stream = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+    console_handler = logging.StreamHandler(console_stream)
     console_handler.setLevel(logging.INFO)
     
     # Format with timestamp for file

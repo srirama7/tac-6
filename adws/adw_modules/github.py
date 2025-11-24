@@ -91,16 +91,19 @@ def fetch_issue(issue_number: str, repo_path: str) -> GitHubIssue:
     env = get_github_env()
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        result = subprocess.run(cmd, capture_output=True, env=env)
 
         if result.returncode == 0:
+            # Decode output manually with UTF-8 to avoid Windows encoding issues
+            stdout_text = result.stdout.decode('utf-8', errors='replace')
             # Parse JSON response into Pydantic model
-            issue_data = json.loads(result.stdout)
+            issue_data = json.loads(stdout_text)
             issue = GitHubIssue(**issue_data)
 
             return issue
         else:
-            print(result.stderr, file=sys.stderr)
+            stderr_text = result.stderr.decode('utf-8', errors='replace')
+            print(stderr_text, file=sys.stderr)
             sys.exit(result.returncode)
     except FileNotFoundError:
         print("Error: GitHub CLI (gh) is not installed.", file=sys.stderr)
