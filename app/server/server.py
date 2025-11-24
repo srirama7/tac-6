@@ -19,8 +19,7 @@ from core.data_models import (
     HealthCheckResponse,
     TableSchema,
     ColumnInfo,
-    ResultsExportRequest,
-    ExportResponse
+    ResultsExportRequest
 )
 from core.file_processor import convert_csv_to_sqlite, convert_json_to_sqlite, convert_jsonl_to_sqlite
 from core.llm_processor import generate_sql
