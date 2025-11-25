@@ -117,13 +117,12 @@ async function loadDatabaseSchema() {
 
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+
   resultsSection.style.display = 'block';
-  
+
   // Display natural language query and SQL
   sqlDisplay.innerHTML = `
     <div class="query-display">
@@ -133,7 +132,7 @@ function displayResults(response: QueryResponse, query: string) {
       <strong>SQL:</strong> <code>${response.sql}</code>
     </div>
   `;
-  
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
@@ -144,13 +143,53 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
+
   // Initialize toggle button
   const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
-  toggleButton.addEventListener('click', () => {
+  // Remove previous event listeners by cloning the button
+  const newToggleButton = toggleButton.cloneNode(true) as HTMLButtonElement;
+  toggleButton.parentNode?.replaceChild(newToggleButton, toggleButton);
+
+  newToggleButton.addEventListener('click', () => {
     resultsContainer.style.display = resultsContainer.style.display === 'none' ? 'block' : 'none';
-    toggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
+    newToggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
   });
+
+  // Initialize download button
+  const downloadButton = document.getElementById('download-results') as HTMLButtonElement;
+  if (downloadButton) {
+    // Remove previous event listeners by cloning the button
+    const newDownloadButton = downloadButton.cloneNode(true) as HTMLButtonElement;
+    downloadButton.parentNode?.replaceChild(newDownloadButton, downloadButton);
+
+    // Only enable download if there are results
+    if (!response.error && response.results.length > 0) {
+      newDownloadButton.disabled = false;
+      newDownloadButton.addEventListener('click', async () => {
+        newDownloadButton.disabled = true;
+        const originalHTML = newDownloadButton.innerHTML;
+        newDownloadButton.innerHTML = '<span class="loading"></span>';
+        try {
+          const exportRequest: ExportQueryRequest = {
+            sql: response.sql,
+            columns: response.columns,
+            results: response.results
+          };
+          const blob = await api.exportQueryResults(exportRequest);
+          const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '_');
+          downloadCSV(blob, `query_results_${timestamp}.csv`);
+        } catch (error) {
+          console.error('Export failed:', error);
+          displayError(error instanceof Error ? error.message : 'Export failed');
+        } finally {
+          newDownloadButton.disabled = false;
+          newDownloadButton.innerHTML = originalHTML;
+        }
+      });
+    } else {
+      newDownloadButton.disabled = true;
+    }
+  }
 }
 
 // Create results table
@@ -219,15 +258,43 @@ function displayTables(tables: TableSchema[]) {
     
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
-    
+
+    // Buttons container
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.style.display = 'flex';
+    buttonsContainer.style.gap = '0.5rem';
+
+    // Download button
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-table-button';
+    downloadButton.innerHTML = '↓';
+    downloadButton.title = 'Export as CSV';
+    downloadButton.onclick = async () => {
+      downloadButton.disabled = true;
+      downloadButton.innerHTML = '<span class="loading"></span>';
+      try {
+        const blob = await api.exportTable(table.name);
+        downloadCSV(blob, `${table.name}.csv`);
+      } catch (error) {
+        console.error('Export failed:', error);
+        displayError(error instanceof Error ? error.message : 'Export failed');
+      } finally {
+        downloadButton.disabled = false;
+        downloadButton.innerHTML = '↓';
+      }
+    };
+
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
+    buttonsContainer.appendChild(downloadButton);
+    buttonsContainer.appendChild(removeButton);
+
     tableHeader.appendChild(tableLeft);
-    tableHeader.appendChild(removeButton);
+    tableHeader.appendChild(buttonsContainer);
     
     // Columns section
     const tableColumns = document.createElement('div');
@@ -394,7 +461,7 @@ function getTypeEmoji(type: string): string {
 async function loadSampleData(sampleType: string) {
   try {
     let filename: string;
-    
+
     if (sampleType === 'users') {
       filename = 'users.json';
     } else if (sampleType === 'products') {
@@ -404,19 +471,41 @@ async function loadSampleData(sampleType: string) {
     } else {
       throw new Error(`Unknown sample type: ${sampleType}`);
     }
-    
+
     const response = await fetch(`/sample-data/${filename}`);
-    
+
     if (!response.ok) {
       throw new Error('Failed to load sample data');
     }
-    
+
     const blob = await response.blob();
     const file = new File([blob], filename, { type: blob.type });
-    
+
     // Upload the file
     await handleFileUpload(file);
   } catch (error) {
     displayError(error instanceof Error ? error.message : 'Failed to load sample data');
+  }
+}
+
+// Download CSV helper function
+function downloadCSV(blob: Blob, filename: string) {
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+
+    // Clean up
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  } catch (error) {
+    console.error('Download failed:', error);
+    displayError('Failed to download CSV file');
   }
 }

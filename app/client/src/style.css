@@ -320,6 +320,67 @@ h2 {
   color: var(--error-color);
 }
 
+.download-table-button {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--primary-color);
+  cursor: pointer;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.download-table-button:hover {
+  background: rgba(102, 126, 234, 0.1);
+  color: var(--secondary-color);
+  transform: translateY(-1px);
+}
+
+.download-table-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.results-buttons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.download-results-button {
+  background: var(--primary-color);
+  border: none;
+  font-size: 1.25rem;
+  color: white;
+  cursor: pointer;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+  padding: 0.5rem 1rem;
+}
+
+.download-results-button:hover:not(:disabled) {
+  background: var(--secondary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.download-results-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--text-secondary);
+}
+
 /* Loading States */
 .loading {
   display: inline-block;
