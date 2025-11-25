@@ -132,6 +132,8 @@ bun run preview            # Preview production build
 - `POST /api/query` - Process natural language query
 - `GET /api/schema` - Get database schema
 - `POST /api/insights` - Generate column insights
+- `POST /api/export/table` - Export table data as CSV
+- `POST /api/export/query` - Export query results as CSV
 - `GET /api/health` - Health check
 
 ## Security

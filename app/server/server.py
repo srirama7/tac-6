@@ -7,6 +7,9 @@ import traceback
 from dotenv import load_dotenv
 import logging
 import sys
+import csv
+from io import StringIO
+from typing import List, Dict, Any
 
 from core.data_models import (
     FileUploadResponse,
@@ -17,7 +20,10 @@ from core.data_models import (
     InsightsResponse,
     HealthCheckResponse,
     TableSchema,
-    ColumnInfo
+    ColumnInfo,
+    TableExportRequest,
+    QueryExportRequest,
+    ExportResponse
 )
 from core.file_processor import convert_csv_to_sqlite, convert_json_to_sqlite, convert_jsonl_to_sqlite
 from core.llm_processor import generate_sql
@@ -238,6 +244,117 @@ async def health_check() -> HealthCheckResponse:
             uptime_seconds=0
         )
 
+def generate_csv_content(columns: List[str], rows: List[Dict[str, Any]]) -> str:
+    """
+    Generate CSV content from columns and rows data.
+
+    Args:
+        columns: List of column names
+        rows: List of row dictionaries
+
+    Returns:
+        str: CSV content as string
+    """
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=columns, lineterminator='\n')
+    writer.writeheader()
+
+    for row in rows:
+        # Convert None values to empty strings for CSV
+        cleaned_row = {k: ('' if v is None else v) for k, v in row.items()}
+        writer.writerow(cleaned_row)
+
+    return output.getvalue()
+
+@app.post("/api/export/table", response_model=ExportResponse)
+async def export_table(request: TableExportRequest) -> ExportResponse:
+    """Export table data as CSV file"""
+    try:
+        table_name = request.table_name
+
+        # Validate table name using security module
+        try:
+            validate_identifier(table_name, "table")
+        except SQLSecurityError as e:
+            raise HTTPException(400, str(e))
+
+        conn = sqlite3.connect("db/database.db")
+
+        # Check if table exists using secure method
+        if not check_table_exists(conn, table_name):
+            conn.close()
+            raise HTTPException(404, f"Table '{table_name}' not found")
+
+        # Query all data from table
+        cursor = execute_query_safely(
+            conn,
+            "SELECT * FROM {table}",
+            identifier_params={'table': table_name}
+        )
+
+        # Get column names
+        columns = [description[0] for description in cursor.description]
+
+        # Fetch all rows
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        conn.close()
+
+        # Generate CSV content
+        csv_content = generate_csv_content(columns, rows)
+
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{table_name}_export_{timestamp}.csv"
+
+        response = ExportResponse(
+            filename=filename,
+            csv_content=csv_content
+        )
+        logger.info(f"[SUCCESS] Table export: {table_name}, rows={len(rows)}, filename={filename}")
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ERROR] Table export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        return ExportResponse(
+            filename="",
+            csv_content="",
+            error=str(e)
+        )
+
+@app.post("/api/export/query", response_model=ExportResponse)
+async def export_query_results(request: QueryExportRequest) -> ExportResponse:
+    """Export query results as CSV file"""
+    try:
+        # Re-execute the query using existing safe execution function
+        result = execute_sql_safely(request.sql)
+
+        if result['error']:
+            raise Exception(result['error'])
+
+        # Generate CSV content
+        csv_content = generate_csv_content(request.columns, result['results'])
+
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"query_results_{timestamp}.csv"
+
+        response = ExportResponse(
+            filename=filename,
+            csv_content=csv_content
+        )
+        logger.info(f"[SUCCESS] Query export: rows={len(result['results'])}, filename={filename}")
+        return response
+    except Exception as e:
+        logger.error(f"[ERROR] Query export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        return ExportResponse(
+            filename="",
+            csv_content="",
+            error=str(e)
+        )
+
 @app.delete("/api/table/{table_name}")
 async def delete_table(table_name: str):
     """Delete a table from the database"""
@@ -247,14 +364,14 @@ async def delete_table(table_name: str):
             validate_identifier(table_name, "table")
         except SQLSecurityError as e:
             raise HTTPException(400, str(e))
-        
+
         conn = sqlite3.connect("db/database.db")
-        
+
         # Check if table exists using secure method
         if not check_table_exists(conn, table_name):
             conn.close()
             raise HTTPException(404, f"Table '{table_name}' not found")
-        
+
         # Drop the table using safe query execution with DDL permission
         execute_query_safely(
             conn,
@@ -264,7 +381,7 @@ async def delete_table(table_name: str):
         )
         conn.commit()
         conn.close()
-        
+
         response = {"message": f"Table '{table_name}' deleted successfully"}
         logger.info(f"[SUCCESS] Table deleted: {table_name}")
         return response

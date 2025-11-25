@@ -80,3 +80,16 @@ class HealthCheckResponse(BaseModel):
     tables_count: int
     version: str = "1.0.0"
     uptime_seconds: float
+
+# Export Models
+class TableExportRequest(BaseModel):
+    table_name: str
+
+class QueryExportRequest(BaseModel):
+    sql: str
+    columns: List[str]
+
+class ExportResponse(BaseModel):
+    filename: str
+    csv_content: str
+    error: Optional[str] = None

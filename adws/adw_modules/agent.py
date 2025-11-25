@@ -45,7 +45,7 @@ def parse_jsonl_output(
         Tuple of (all_messages, result_message) where result_message is None if not found
     """
     try:
-        with open(output_file, "r") as f:
+        with open(output_file, "r", encoding="utf-8") as f:
             # Read all lines and parse each as JSON
             messages = [json.loads(line) for line in f if line.strip()]
 
@@ -78,7 +78,7 @@ def convert_jsonl_to_json(jsonl_file: str) -> str:
     messages, _ = parse_jsonl_output(jsonl_file)
 
     # Write as JSON array
-    with open(json_file, "w") as f:
+    with open(json_file, "w", encoding="utf-8") as f:
         json.dump(messages, f, indent=2)
 
     print(f"Created JSON file: {json_file}")
@@ -86,26 +86,21 @@ def convert_jsonl_to_json(jsonl_file: str) -> str:
 
 
 def get_claude_env() -> Dict[str, str]:
-    """Get only the required environment variables for Claude Code execution.
+    """Get environment variables for Claude Code execution.
 
-    Returns a dictionary containing only the necessary environment variables
-    based on .env.sample configuration.
+    Returns a dictionary starting with the parent's full environment,
+    then adds/overrides specific ADW-related variables.
 
-    Subprocess env behavior:
-    - env=None → Inherits parent's environment (default)
-    - env={} → Empty environment (no variables)
-    - env=custom_dict → Only uses specified variables
-
-    So this will work with gh authentication:
-    # These are equivalent:
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    result = subprocess.run(cmd, capture_output=True, text=True, env=None)
-
-    But this will NOT work (no PATH, no auth):
-    result = subprocess.run(cmd, capture_output=True, text=True, env={})
+    This allows Claude Code to use its own authentication when
+    ANTHROPIC_API_KEY is not set, while still allowing override
+    of specific variables from .env configuration.
     """
-    required_env_vars = {
-        # Anthropic Configuration (required)
+    # Start with full parent environment so Claude Code can use its own auth
+    env = os.environ.copy()
+
+    # Override/add specific ADW configuration variables
+    adw_vars = {
+        # Anthropic Configuration (optional - Claude Code uses its own auth if not set)
         "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
         # Claude Code Configuration
         "CLAUDE_CODE_PATH": os.getenv("CLAUDE_CODE_PATH", "claude"),
@@ -114,22 +109,20 @@ def get_claude_env() -> Dict[str, str]:
         ),
         # Agent Cloud Sandbox Environment (optional)
         "E2B_API_KEY": os.getenv("E2B_API_KEY"),
-        # Basic environment variables Claude Code might need
-        "HOME": os.getenv("HOME"),
-        "USER": os.getenv("USER"),
-        "PATH": os.getenv("PATH"),
-        "SHELL": os.getenv("SHELL"),
-        "TERM": os.getenv("TERM"),
     }
 
     # Only add GitHub tokens if GITHUB_PAT exists
     github_pat = os.getenv("GITHUB_PAT")
     if github_pat:
-        required_env_vars["GITHUB_PAT"] = github_pat
-        required_env_vars["GH_TOKEN"] = github_pat  # Claude Code uses GH_TOKEN
+        adw_vars["GITHUB_PAT"] = github_pat
+        adw_vars["GH_TOKEN"] = github_pat  # Claude Code uses GH_TOKEN
 
-    # Filter out None values
-    return {k: v for k, v in required_env_vars.items() if v is not None}
+    # Update env with ADW vars, filtering out None values
+    for k, v in adw_vars.items():
+        if v is not None:
+            env[k] = v
+
+    return env
 
 
 def save_prompt(prompt: str, adw_id: str, agent_name: str = "ops") -> None:
@@ -151,7 +144,7 @@ def save_prompt(prompt: str, adw_id: str, agent_name: str = "ops") -> None:
 
     # Save prompt to file
     prompt_file = os.path.join(prompt_dir, f"{command_name}.txt")
-    with open(prompt_file, "w") as f:
+    with open(prompt_file, "w", encoding="utf-8") as f:
         f.write(prompt)
 
     print(f"Saved prompt to: {prompt_file}")
@@ -186,11 +179,14 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
     # Set up environment with only required variables
     env = get_claude_env()
 
+    # Get project root for cwd
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
     try:
         # Execute Claude Code and pipe output to file
-        with open(request.output_file, "w") as f:
+        with open(request.output_file, "w", encoding="utf-8") as f:
             result = subprocess.run(
-                cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env
+                cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env, cwd=project_root, encoding="utf-8"
             )
 
         if result.returncode == 0:
@@ -224,7 +220,7 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
                 )
             else:
                 # No result message found, return raw output
-                with open(request.output_file, "r") as f:
+                with open(request.output_file, "r", encoding="utf-8") as f:
                     raw_output = f.read()
                 return AgentPromptResponse(
                     output=raw_output, success=True, session_id=None
@@ -245,13 +241,37 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
 
 
 def execute_template(request: AgentTemplateRequest) -> AgentPromptResponse:
-    """Execute a Claude Code template with slash command and arguments."""
-    # Construct prompt from slash command and args
-    prompt = f"{request.slash_command} {' '.join(request.args)}"
+    """Execute a Claude Code template with slash command and arguments.
+
+    Custom slash commands from .claude/commands/ are read and expanded with arguments.
+    The $ARGUMENTS placeholder and positional args ($1, $2, etc.) are replaced.
+    """
+    # Get project root directory
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    # Try to read the custom command template
+    # Remove leading slash from command name
+    command_name = request.slash_command.lstrip('/')
+    template_path = os.path.join(project_root, ".claude", "commands", f"{command_name}.md")
+
+    if os.path.exists(template_path):
+        # Read the template and substitute arguments
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template_content = f.read()
+
+        # Substitute positional arguments ($1, $2, $3, etc.)
+        prompt = template_content
+        for i, arg in enumerate(request.args, 1):
+            prompt = prompt.replace(f'${i}', arg)
+
+        # Also substitute $ARGUMENTS with all arguments joined
+        args_str = ' '.join(request.args)
+        prompt = prompt.replace('$ARGUMENTS', args_str)
+    else:
+        # Fall back to using slash command directly (for built-in commands)
+        prompt = f"{request.slash_command} {' '.join(request.args)}"
 
     # Create output directory with adw_id at project root
-    # __file__ is in adws/adw_modules/, so we need to go up 3 levels to get to project root
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     output_dir = os.path.join(
         project_root, "agents", request.adw_id, request.agent_name
     )
