@@ -4,10 +4,8 @@ Comprehensive tests for CSV export endpoints
 
 import pytest
 import sqlite3
-import tempfile
 import os
 from fastapi.testclient import TestClient
-from unittest.mock import patch
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
