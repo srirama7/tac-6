@@ -36,7 +36,6 @@ from adw_modules.github import (
 from adw_modules.workflow_ops import (
     classify_issue,
     build_plan,
-    get_plan_file,
     generate_branch_name,
     create_commit,
     format_issue_message,
@@ -50,7 +49,6 @@ from adw_modules.data_types import GitHubIssue, IssueClassSlashCommand
 def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
     """Check that all required environment variables are set."""
     required_vars = [
-        "ANTHROPIC_API_KEY",
         "CLAUDE_CODE_PATH",
     ]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
@@ -196,17 +194,26 @@ def main():
         format_issue_message(adw_id, AGENT_PLANNER, "✅ Implementation plan created"),
     )
 
-    # Find the plan file that was created
-    logger.info("Finding plan file")
-    plan_file_path, error = get_plan_file(
-        plan_response.output, issue_number, adw_id, logger
-    )
-
-    if error:
-        logger.error(f"Error finding plan file: {error}")
+    # Get the plan file path directly from response
+    logger.info("Getting plan file path")
+    plan_file_path = plan_response.output.strip()
+    
+    # Validate the path exists
+    if not plan_file_path:
+        error = "No plan file path returned from planning agent"
+        logger.error(error)
         make_issue_comment(
             issue_number,
-            format_issue_message(adw_id, "ops", f"❌ Error finding plan file: {error}"),
+            format_issue_message(adw_id, "ops", f"❌ {error}"),
+        )
+        sys.exit(1)
+    
+    if not os.path.exists(plan_file_path):
+        error = f"Plan file does not exist: {plan_file_path}"
+        logger.error(error)
+        make_issue_comment(
+            issue_number,
+            format_issue_message(adw_id, "ops", f"❌ {error}"),
         )
         sys.exit(1)
 

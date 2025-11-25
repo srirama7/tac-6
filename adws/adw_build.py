@@ -39,7 +39,6 @@ from adw_modules.data_types import GitHubIssue
 
 def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
     """Check that all required environment variables are set."""
-    # Note: ANTHROPIC_API_KEY is not required - Claude Code will use its own auth if not set
     required_vars = [
         "CLAUDE_CODE_PATH",
     ]
@@ -56,14 +55,6 @@ def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
             for var in missing_vars:
                 print(f"  - {var}", file=sys.stderr)
         sys.exit(1)
-
-    # Warn if ANTHROPIC_API_KEY is not set (but don't fail)
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        warning_msg = "Note: ANTHROPIC_API_KEY not set - Claude Code will use its own authentication"
-        if logger:
-            logger.info(warning_msg)
-        else:
-            print(warning_msg)
 
 
 def main():

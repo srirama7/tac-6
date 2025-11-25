@@ -4,14 +4,15 @@
 # ///
 
 """
-ADW Plan, Build & Test - AI Developer Workflow for agentic planning, building and testing
+ADW Plan, Build, Test & Review - AI Developer Workflow for complete agentic development cycle
 
-Usage: uv run adw_plan_build_test.py <issue-number> [adw-id]
+Usage: uv run adw_plan_build_test_review.py <issue-number> [adw-id]
 
 This script runs the complete ADW pipeline:
 1. adw_plan.py - Planning phase
 2. adw_build.py - Implementation phase
 3. adw_test.py - Testing phase
+4. adw_review.py - Review phase
 
 The scripts are chained together via persistent state (adw_state.json).
 """
@@ -28,7 +29,7 @@ from adw_modules.workflow_ops import ensure_adw_id
 def main():
     """Main entry point."""
     if len(sys.argv) < 2:
-        print("Usage: uv run adw_plan_build_test.py <issue-number> [adw-id]")
+        print("Usage: uv run adw_plan_build_test_review.py <issue-number> [adw-id]")
         sys.exit(1)
 
     issue_number = sys.argv[1]
@@ -74,11 +75,23 @@ def main():
         os.path.join(script_dir, "adw_test.py"),
         issue_number,
         adw_id,
-        "--skip-e2e",
     ]
     print(f"Running: {' '.join(test_cmd)}")
     test = subprocess.run(test_cmd)
     if test.returncode != 0:
+        sys.exit(1)
+
+    # Run review with the ADW ID
+    review_cmd = [
+        "uv",
+        "run",
+        os.path.join(script_dir, "adw_review.py"),
+        issue_number,
+        adw_id,
+    ]
+    print(f"Running: {' '.join(review_cmd)}")
+    review = subprocess.run(review_cmd)
+    if review.returncode != 0:
         sys.exit(1)
 
 
