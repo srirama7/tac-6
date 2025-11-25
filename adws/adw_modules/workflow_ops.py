@@ -516,5 +516,171 @@ def create_or_find_branch(
     
     state.update(branch_name=branch_name)
     logger.info(f"Created and checked out new branch: {branch_name}")
-    
+
     return branch_name, None
+
+
+def find_spec_file(state: ADWState, logger: logging.Logger) -> Optional[str]:
+    """Find the spec file for the current ADW workflow.
+
+    Looks in the following order:
+    1. plan_file field in state
+    2. Glob search in specs/ directory using issue number and adw_id
+
+    Args:
+        state: ADWState instance
+        logger: Logger instance
+
+    Returns:
+        Path to spec file if found, None otherwise
+    """
+    import os
+
+    # 1. Check state for plan_file
+    plan_file = state.get("plan_file")
+    if plan_file and os.path.exists(plan_file):
+        logger.info(f"Found spec file in state: {plan_file}")
+        return plan_file
+
+    # 2. Search specs directory
+    issue_number = state.get("issue_number")
+    adw_id = state.get("adw_id")
+
+    if issue_number and adw_id:
+        # Try specific pattern first
+        pattern = f"specs/*{issue_number}*{adw_id}*.md"
+        matches = glob.glob(pattern)
+        if matches:
+            logger.info(f"Found spec file via glob: {matches[0]}")
+            return matches[0]
+
+        # Try without adw_id
+        pattern = f"specs/*{issue_number}*.md"
+        matches = glob.glob(pattern)
+        if matches:
+            logger.info(f"Found spec file via glob (without adw_id): {matches[0]}")
+            return matches[0]
+
+    logger.warning("Could not find spec file")
+    return None
+
+
+def create_and_implement_patch(
+    adw_id: str,
+    review_change_request: str,
+    logger: logging.Logger,
+    agent_name_planner: str,
+    agent_name_implementor: str,
+    spec_path: Optional[str] = None,
+    issue_screenshots: Optional[str] = None,
+) -> Tuple[Optional[str], AgentPromptResponse]:
+    """Create and implement a patch for a review issue.
+
+    This function:
+    1. Creates a patch plan using the /patch_plan command
+    2. Implements the patch using the /implement command
+
+    Args:
+        adw_id: ADW workflow ID
+        review_change_request: Description of the change needed
+        logger: Logger instance
+        agent_name_planner: Name for the patch planner agent
+        agent_name_implementor: Name for the patch implementor agent
+        spec_path: Optional path to the spec file
+        issue_screenshots: Optional path to screenshots
+
+    Returns:
+        Tuple of (patch_file_path, implementation_response)
+        patch_file_path is None if plan creation failed
+    """
+    import os
+
+    # Step 1: Create patch plan
+    logger.info(f"Creating patch plan for: {review_change_request[:100]}...")
+
+    # Build args for patch_plan command
+    args = [adw_id, review_change_request]
+    if spec_path:
+        args.append(spec_path)
+    if issue_screenshots:
+        args.append(issue_screenshots)
+
+    plan_request = AgentTemplateRequest(
+        agent_name=agent_name_planner,
+        slash_command="/patch_plan",
+        args=args,
+        adw_id=adw_id,
+        model="sonnet",
+    )
+
+    plan_response = execute_template(plan_request)
+
+    if not plan_response.success:
+        logger.error(f"Failed to create patch plan: {plan_response.output}")
+        return None, plan_response
+
+    # Extract patch file path from response
+    patch_file = None
+    plan_output = plan_response.output.strip()
+
+    # Look for path patterns in the output
+    import re
+
+    # Pattern 1: **Path:** `path`
+    path_match = re.search(r'\*\*Path:\*\*\s*`([^`]+)`', plan_output)
+    if path_match:
+        patch_file = path_match.group(1)
+
+    # Pattern 2: Plain path ending with .md in specs/patches/
+    if not patch_file:
+        path_match = re.search(r'(specs/patches/[^\s\n]+\.md)', plan_output)
+        if path_match:
+            patch_file = path_match.group(1)
+
+    # Pattern 3: Any .md file path
+    if not patch_file:
+        path_match = re.search(r'([^\s\n]+\.md)', plan_output)
+        if path_match and os.path.exists(path_match.group(1)):
+            patch_file = path_match.group(1)
+
+    # Pattern 4: If the output is just a path
+    if not patch_file and plan_output.endswith('.md') and os.path.exists(plan_output):
+        patch_file = plan_output
+
+    if not patch_file:
+        logger.error(f"Could not extract patch file path from response: {plan_output[:200]}")
+        return None, AgentPromptResponse(
+            output=f"Could not extract patch file from: {plan_output[:200]}",
+            success=False,
+            session_id=None
+        )
+
+    if not os.path.exists(patch_file):
+        logger.error(f"Patch file does not exist: {patch_file}")
+        return None, AgentPromptResponse(
+            output=f"Patch file not found: {patch_file}",
+            success=False,
+            session_id=None
+        )
+
+    logger.info(f"Created patch plan: {patch_file}")
+
+    # Step 2: Implement the patch
+    logger.info(f"Implementing patch from: {patch_file}")
+
+    implement_request = AgentTemplateRequest(
+        agent_name=agent_name_implementor,
+        slash_command="/implement",
+        args=[patch_file],
+        adw_id=adw_id,
+        model="sonnet",
+    )
+
+    implement_response = execute_template(implement_request)
+
+    if not implement_response.success:
+        logger.error(f"Failed to implement patch: {implement_response.output}")
+    else:
+        logger.info("Patch implementation completed successfully")
+
+    return patch_file, implement_response
