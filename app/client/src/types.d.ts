@@ -78,3 +78,11 @@ interface HealthCheckResponse {
   version: string;
   uptime_seconds: number;
 }
+
+// CSV Export Types
+interface ExportResponse {
+  csv_content: string;
+  filename: string;
+  row_count: number;
+  error?: string;
+}

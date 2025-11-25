@@ -80,3 +80,17 @@ class HealthCheckResponse(BaseModel):
     tables_count: int
     version: str = "1.0.0"
     uptime_seconds: float
+
+# CSV Export Models
+class TableExportRequest(BaseModel):
+    table_name: str = Field(..., description="Name of the table to export")
+
+class QueryExportRequest(BaseModel):
+    columns: List[str] = Field(..., description="Column names for the CSV header")
+    rows: List[Dict[str, Any]] = Field(..., description="Row data to export")
+
+class ExportResponse(BaseModel):
+    csv_content: str = Field(..., description="CSV formatted content")
+    filename: str = Field(..., description="Suggested filename for download")
+    row_count: int = Field(..., description="Number of rows exported")
+    error: Optional[str] = None

@@ -7,6 +7,8 @@ import traceback
 from dotenv import load_dotenv
 import logging
 import sys
+import csv
+from io import StringIO
 
 from core.data_models import (
     FileUploadResponse,
@@ -17,7 +19,10 @@ from core.data_models import (
     InsightsResponse,
     HealthCheckResponse,
     TableSchema,
-    ColumnInfo
+    ColumnInfo,
+    TableExportRequest,
+    QueryExportRequest,
+    ExportResponse
 )
 from core.file_processor import convert_csv_to_sqlite, convert_json_to_sqlite, convert_jsonl_to_sqlite
 from core.llm_processor import generate_sql
@@ -247,14 +252,14 @@ async def delete_table(table_name: str):
             validate_identifier(table_name, "table")
         except SQLSecurityError as e:
             raise HTTPException(400, str(e))
-        
+
         conn = sqlite3.connect("db/database.db")
-        
+
         # Check if table exists using secure method
         if not check_table_exists(conn, table_name):
             conn.close()
             raise HTTPException(404, f"Table '{table_name}' not found")
-        
+
         # Drop the table using safe query execution with DDL permission
         execute_query_safely(
             conn,
@@ -264,7 +269,7 @@ async def delete_table(table_name: str):
         )
         conn.commit()
         conn.close()
-        
+
         response = {"message": f"Table '{table_name}' deleted successfully"}
         logger.info(f"[SUCCESS] Table deleted: {table_name}")
         return response
@@ -274,6 +279,95 @@ async def delete_table(table_name: str):
         logger.error(f"[ERROR] Table deletion failed: {str(e)}")
         logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(500, f"Error deleting table: {str(e)}")
+
+
+def generate_csv_content(columns: list, rows: list) -> str:
+    """Generate CSV content from columns and rows."""
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=columns, lineterminator='\n')
+    writer.writeheader()
+    for row in rows:
+        cleaned_row = {k: ('' if v is None else v) for k, v in row.items()}
+        writer.writerow(cleaned_row)
+    return output.getvalue()
+
+
+@app.post("/api/export/table", response_model=ExportResponse)
+async def export_table(request: TableExportRequest) -> ExportResponse:
+    """Export a table as CSV"""
+    try:
+        # Validate table name
+        try:
+            validate_identifier(request.table_name, "table")
+        except SQLSecurityError as e:
+            raise HTTPException(400, str(e))
+
+        conn = sqlite3.connect("db/database.db")
+
+        # Check if table exists
+        if not check_table_exists(conn, request.table_name):
+            conn.close()
+            raise HTTPException(404, f"Table '{request.table_name}' not found")
+
+        # Get all data from table
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM {request.table_name}")
+        rows = cursor.fetchall()
+        columns = [description[0] for description in cursor.description]
+        conn.close()
+
+        # Convert to list of dicts
+        row_dicts = [dict(zip(columns, row)) for row in rows]
+
+        # Generate CSV
+        csv_content = generate_csv_content(columns, row_dicts)
+        filename = f"{request.table_name}.csv"
+
+        response = ExportResponse(
+            csv_content=csv_content,
+            filename=filename,
+            row_count=len(row_dicts)
+        )
+        logger.info(f"[SUCCESS] Table exported: {request.table_name}, rows: {len(row_dicts)}")
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ERROR] Table export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        return ExportResponse(
+            csv_content="",
+            filename="",
+            row_count=0,
+            error=str(e)
+        )
+
+
+@app.post("/api/export/query", response_model=ExportResponse)
+async def export_query_results(request: QueryExportRequest) -> ExportResponse:
+    """Export query results as CSV"""
+    try:
+        # Generate CSV from provided columns and rows
+        csv_content = generate_csv_content(request.columns, request.rows)
+        filename = "query_results.csv"
+
+        response = ExportResponse(
+            csv_content=csv_content,
+            filename=filename,
+            row_count=len(request.rows)
+        )
+        logger.info(f"[SUCCESS] Query results exported, rows: {len(request.rows)}")
+        return response
+    except Exception as e:
+        logger.error(f"[ERROR] Query export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        return ExportResponse(
+            csv_content="",
+            filename="",
+            row_count=0,
+            error=str(e)
+        )
+
 
 if __name__ == "__main__":
     import uvicorn

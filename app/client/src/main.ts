@@ -1,7 +1,8 @@
 import './style.css'
 import { api } from './api/client'
 
-// Global state
+// Global state to store current query results for export
+let currentQueryResults: { columns: string[], rows: Record<string, any>[] } | null = null;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -117,13 +118,19 @@ async function loadDatabaseSchema() {
 
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
+
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+
   resultsSection.style.display = 'block';
-  
+
+  // Store current results for export
+  currentQueryResults = {
+    columns: response.columns,
+    rows: response.results
+  };
+
   // Display natural language query and SQL
   sqlDisplay.innerHTML = `
     <div class="query-display">
@@ -133,24 +140,44 @@ function displayResults(response: QueryResponse, query: string) {
       <strong>SQL:</strong> <code>${response.sql}</code>
     </div>
   `;
-  
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
+    currentQueryResults = null;
   } else if (response.results.length === 0) {
     resultsContainer.innerHTML = '<p>No results found.</p>';
+    currentQueryResults = null;
   } else {
     const table = createResultsTable(response.results, response.columns);
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
+
+  // Update results header with download button
+  const resultsHeader = resultsSection.querySelector('.results-header') as HTMLElement;
+
+  // Remove existing buttons to avoid duplicates
+  const existingDownloadBtn = resultsHeader.querySelector('.download-results-button');
+  if (existingDownloadBtn) existingDownloadBtn.remove();
+
+  // Add download button to the left of toggle button if we have results
+  if (currentQueryResults && currentQueryResults.rows.length > 0) {
+    const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-results-button';
+    downloadButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+    downloadButton.title = 'Download results as CSV';
+    downloadButton.onclick = downloadQueryResults;
+    toggleButton.parentNode?.insertBefore(downloadButton, toggleButton);
+  }
+
   // Initialize toggle button
   const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
-  toggleButton.addEventListener('click', () => {
+  toggleButton.onclick = () => {
     resultsContainer.style.display = resultsContainer.style.display === 'none' ? 'block' : 'none';
     toggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
-  });
+  };
 }
 
 // Create results table
@@ -220,14 +247,30 @@ function displayTables(tables: TableSchema[]) {
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
     
+    // Create buttons container for download and remove buttons
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.style.display = 'flex';
+    buttonsContainer.style.alignItems = 'center';
+    buttonsContainer.style.gap = '0.5rem';
+
+    // Download button (to the left of the 'x' icon)
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-table-button';
+    downloadButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+    downloadButton.title = 'Download table as CSV';
+    downloadButton.onclick = () => downloadTable(table.name);
+
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
+    buttonsContainer.appendChild(downloadButton);
+    buttonsContainer.appendChild(removeButton);
+
     tableHeader.appendChild(tableLeft);
-    tableHeader.appendChild(removeButton);
+    tableHeader.appendChild(buttonsContainer);
     
     // Columns section
     const tableColumns = document.createElement('div');
@@ -377,7 +420,7 @@ async function removeTable(tableName: string) {
 // Get emoji for data type
 function getTypeEmoji(type: string): string {
   const upperType = type.toUpperCase();
-  
+
   // SQLite types
   if (upperType.includes('INT')) return '🔢';
   if (upperType.includes('REAL') || upperType.includes('FLOAT') || upperType.includes('DOUBLE')) return '💯';
@@ -385,9 +428,58 @@ function getTypeEmoji(type: string): string {
   if (upperType.includes('DATE') || upperType.includes('TIME')) return '📅';
   if (upperType.includes('BOOL')) return '✓';
   if (upperType.includes('BLOB')) return '📦';
-  
+
   // Default
   return '📊';
+}
+
+// Helper function to trigger CSV download
+function triggerDownload(csvContent: string, filename: string) {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// Download table as CSV
+async function downloadTable(tableName: string) {
+  try {
+    const response = await api.exportTable(tableName);
+    if (response.error) {
+      displayError(response.error);
+      return;
+    }
+    triggerDownload(response.csv_content, response.filename);
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to export table');
+  }
+}
+
+// Download query results as CSV
+async function downloadQueryResults() {
+  if (!currentQueryResults) {
+    displayError('No query results to export');
+    return;
+  }
+
+  try {
+    const response = await api.exportQueryResults(
+      currentQueryResults.columns,
+      currentQueryResults.rows
+    );
+    if (response.error) {
+      displayError(response.error);
+      return;
+    }
+    triggerDownload(response.csv_content, response.filename);
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to export results');
+  }
 }
 
 // Load sample data

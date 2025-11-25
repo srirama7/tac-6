@@ -75,5 +75,27 @@ export const api = {
   // Health check
   async healthCheck(): Promise<HealthCheckResponse> {
     return apiRequest<HealthCheckResponse>('/health');
+  },
+
+  // Export table as CSV
+  async exportTable(tableName: string): Promise<ExportResponse> {
+    return apiRequest<ExportResponse>('/export/table', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ table_name: tableName })
+    });
+  },
+
+  // Export query results as CSV
+  async exportQueryResults(columns: string[], rows: Record<string, any>[]): Promise<ExportResponse> {
+    return apiRequest<ExportResponse>('/export/query', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ columns, rows })
+    });
   }
 };
