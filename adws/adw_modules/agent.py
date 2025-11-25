@@ -261,12 +261,13 @@ def execute_template(request: AgentTemplateRequest) -> AgentPromptResponse:
     output_file = os.path.join(output_dir, "raw_output.jsonl")
 
     # Create prompt request with specific parameters
+    # Note: dangerously_skip_permissions=False to ensure custom slash commands are loaded
     prompt_request = AgentPromptRequest(
         prompt=prompt,
         adw_id=request.adw_id,
         agent_name=request.agent_name,
         model=request.model,
-        dangerously_skip_permissions=True,
+        dangerously_skip_permissions=False,
         output_file=output_file,
     )
 
