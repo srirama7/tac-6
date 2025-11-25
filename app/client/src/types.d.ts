@@ -78,3 +78,10 @@ interface HealthCheckResponse {
   version: string;
   uptime_seconds: number;
 }
+
+// Export Types
+interface ExportRequest {
+  sql: string;
+  results?: Record<string, any>[];
+  columns?: string[];
+}

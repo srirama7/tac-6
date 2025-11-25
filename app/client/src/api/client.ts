@@ -75,5 +75,85 @@ export const api = {
   // Health check
   async healthCheck(): Promise<HealthCheckResponse> {
     return apiRequest<HealthCheckResponse>('/health');
+  },
+
+  // Export table to CSV
+  async exportTable(tableName: string): Promise<void> {
+    const url = `${API_BASE_URL}/export/table/${tableName}`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Get the CSV blob
+      const blob = await response.blob();
+
+      // Create a download link and trigger it
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `${tableName}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Table export failed:', error);
+      throw error;
+    }
+  },
+
+  // Export query results to CSV
+  async exportQueryResults(sql: string, results: Record<string, any>[], columns: string[]): Promise<void> {
+    const url = `${API_BASE_URL}/export/results`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sql,
+          results,
+          columns
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Get the CSV blob
+      const blob = await response.blob();
+
+      // Get filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'query_results.csv';
+      if (contentDisposition) {
+        const matches = /filename=([^;]+)/.exec(contentDisposition);
+        if (matches && matches[1]) {
+          filename = matches[1];
+        }
+      }
+
+      // Create a download link and trigger it
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Query results export failed:', error);
+      throw error;
+    }
   }
 };

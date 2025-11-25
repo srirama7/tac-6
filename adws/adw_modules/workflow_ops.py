@@ -260,10 +260,21 @@ def create_commit(
     # Create unique committer agent name by suffixing '_committer'
     unique_agent_name = f"{agent_name}_committer"
 
+    # Truncate issue data to avoid Windows command line length limit (8191 chars)
+    # Only include essential fields: number, title, body
+    # Exclude comments, labels, and other verbose fields
+    truncated_issue = {
+        "number": issue.number,
+        "title": issue.title,
+        "body": (issue.body[:1000] + "..." if issue.body and len(issue.body) > 1000 else issue.body) or "",
+        "url": issue.url
+    }
+    truncated_issue_json = json.dumps(truncated_issue)
+
     request = AgentTemplateRequest(
         agent_name=unique_agent_name,
         slash_command="/commit",
-        args=[agent_name, issue_type, issue.model_dump_json(by_alias=True)],
+        args=[agent_name, issue_type, truncated_issue_json],
         adw_id=adw_id,
         model="sonnet",
     )

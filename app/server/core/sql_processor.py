@@ -1,8 +1,10 @@
 import sqlite3
-from typing import Dict, Any
+import csv
+import io
+from typing import Dict, Any, List
 from .sql_security import (
-    execute_query_safely, 
-    validate_sql_query, 
+    execute_query_safely,
+    validate_sql_query,
     SQLSecurityError
 )
 
@@ -110,8 +112,34 @@ def get_database_schema() -> Dict[str, Any]:
                 continue
         
         conn.close()
-        
+
         return schema
-        
+
     except Exception as e:
         return {'tables': {}, 'error': str(e)}
+
+def convert_to_csv(rows: List[Dict[str, Any]], columns: List[str]) -> str:
+    """
+    Convert database rows to CSV format
+
+    Args:
+        rows: List of dictionaries representing database rows
+        columns: List of column names for the CSV header
+
+    Returns:
+        str: CSV formatted string with proper escaping
+    """
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=columns, quoting=csv.QUOTE_MINIMAL)
+
+    # Write header row
+    writer.writeheader()
+
+    # Write data rows
+    for row in rows:
+        writer.writerow(row)
+
+    csv_content = output.getvalue()
+    output.close()
+
+    return csv_content

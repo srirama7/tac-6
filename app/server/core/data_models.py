@@ -80,3 +80,9 @@ class HealthCheckResponse(BaseModel):
     tables_count: int
     version: str = "1.0.0"
     uptime_seconds: float
+
+# Export Models
+class ExportRequest(BaseModel):
+    sql: str = Field(..., description="SQL query to execute for export")
+    results: Optional[List[Dict[str, Any]]] = None  # Pre-computed results (for query results export)
+    columns: Optional[List[str]] = None  # Pre-computed columns (for query results export)
