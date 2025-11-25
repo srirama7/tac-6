@@ -114,22 +114,32 @@ def classify_issue(
     
     # Extract the classification from the response
     output = response.output.strip()
-    
+
     # Look for the classification pattern in the output
     # Claude might add explanation, so we need to extract just the command
-    classification_match = re.search(r'(/chore|/bug|/feature|0)', output)
-    
+    # First try exact slash commands
+    classification_match = re.search(r'(/chore|/bug|/feature)', output)
+
     if classification_match:
         issue_command = classification_match.group(1)
     else:
-        issue_command = output
-    
-    if issue_command == "0":
-        return None, f"No command selected: {response.output}"
-    
+        # If no slash command found, look for keywords (case-insensitive)
+        # to handle verbose responses like "this is a feature request"
+        output_lower = output.lower()
+        if 'feature' in output_lower or 'enhancement' in output_lower or 'new functionality' in output_lower:
+            issue_command = '/feature'
+        elif 'bug' in output_lower or 'fix' in output_lower or 'broken' in output_lower or 'error' in output_lower:
+            issue_command = '/bug'
+        elif 'chore' in output_lower or 'refactor' in output_lower or 'cleanup' in output_lower or 'maintenance' in output_lower:
+            issue_command = '/chore'
+        elif output == "0":
+            return None, f"No command selected: {response.output}"
+        else:
+            issue_command = output
+
     if issue_command not in ["/chore", "/bug", "/feature"]:
         return None, f"Invalid command selected: {response.output}"
-    
+
     return issue_command, None  # type: ignore
 
 
@@ -240,7 +250,23 @@ def generate_branch_name(
     if not response.success:
         return None, response.output
 
-    branch_name = response.output.strip()
+    # Extract branch name from possibly verbose response
+    output = response.output.strip()
+
+    # Look for branch name pattern in backticks (markdown format)
+    # Pattern: `branch-name` or **`branch-name`**
+    backtick_match = re.search(r'`([a-z]+-issue-\d+-adw-[a-z0-9]+-[a-z0-9-]+)`', output, re.IGNORECASE)
+    if backtick_match:
+        branch_name = backtick_match.group(1)
+    else:
+        # Fallback: look for standard branch pattern anywhere in output
+        pattern_match = re.search(r'((?:feature|bug|chore)-issue-\d+-adw-[a-z0-9]+-[a-z0-9-]+)', output, re.IGNORECASE)
+        if pattern_match:
+            branch_name = pattern_match.group(1)
+        else:
+            # If no pattern found, use first line (might be simple output)
+            branch_name = output.split('\n')[0].strip()
+
     logger.info(f"Generated branch name: {branch_name}")
     return branch_name, None
 

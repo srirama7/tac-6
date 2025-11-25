@@ -151,7 +151,7 @@ def save_prompt(prompt: str, adw_id: str, agent_name: str = "ops") -> None:
 
     # Save prompt to file
     prompt_file = os.path.join(prompt_dir, f"{command_name}.txt")
-    with open(prompt_file, "w") as f:
+    with open(prompt_file, "w", encoding='utf-8') as f:
         f.write(prompt)
 
     print(f"Saved prompt to: {prompt_file}")
@@ -173,62 +173,35 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
-    # Build command - always use stream-json format and verbose
-    cmd = [CLAUDE_PATH, "-p", request.prompt]
+    # Build command - use stdin for prompt (NOT -p flag which has issues with newlines)
+    # Note: Do NOT use --output-format stream-json as it prevents custom slash commands from loading
+    cmd = [CLAUDE_PATH, "-p", "-"]
     cmd.extend(["--model", request.model])
-    cmd.extend(["--output-format", "stream-json"])
-    cmd.append("--verbose")
 
     # Add dangerous skip permissions flag if enabled
     if request.dangerously_skip_permissions:
         cmd.append("--dangerously-skip-permissions")
 
-    # Set up environment with only required variables
-    env = get_claude_env()
+    # Get project root to ensure Claude Code sees .claude/commands/
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     try:
-        # Execute Claude Code and pipe output to file
-        with open(request.output_file, "w") as f:
-            result = subprocess.run(
-                cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env
-            )
+        # Execute Claude Code from project root with prompt via stdin
+        result = subprocess.run(
+            cmd, input=request.prompt, capture_output=True, text=True, encoding='utf-8',
+            cwd=project_root
+        )
+
+        # Save output to file for logging
+        with open(request.output_file, "w", encoding='utf-8') as f:
+            f.write(result.stdout)
+        print(f"Output saved to: {request.output_file}")
 
         if result.returncode == 0:
-            print(f"Output saved to: {request.output_file}")
-
-            # Parse the JSONL file
-            messages, result_message = parse_jsonl_output(request.output_file)
-
-            # Convert JSONL to JSON array file
-            json_file = convert_jsonl_to_json(request.output_file)
-
-            if result_message:
-                # Extract session_id from result message
-                session_id = result_message.get("session_id")
-
-                # Check if there was an error in the result
-                is_error = result_message.get("is_error", False)
-                subtype = result_message.get("subtype", "")
-                
-                # Handle error_during_execution case where there's no result field
-                if subtype == "error_during_execution":
-                    error_msg = "Error during execution: Agent encountered an error and did not return a result"
-                    return AgentPromptResponse(
-                        output=error_msg, success=False, session_id=session_id
-                    )
-                
-                result_text = result_message.get("result", "")
-
-                return AgentPromptResponse(
-                    output=result_text, success=not is_error, session_id=session_id
-                )
-            else:
-                # No result message found, return raw output
-                with open(request.output_file, "r") as f:
-                    raw_output = f.read()
-                return AgentPromptResponse(
-                    output=raw_output, success=True, session_id=None
-                )
+            # Return the text output directly
+            return AgentPromptResponse(
+                output=result.stdout.strip(), success=True, session_id=None
+            )
         else:
             error_msg = f"Claude Code error: {result.stderr}"
             print(error_msg, file=sys.stderr)
@@ -250,7 +223,6 @@ def execute_template(request: AgentTemplateRequest) -> AgentPromptResponse:
     prompt = f"{request.slash_command} {' '.join(request.args)}"
 
     # Create output directory with adw_id at project root
-    # __file__ is in adws/adw_modules/, so we need to go up 3 levels to get to project root
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     output_dir = os.path.join(
         project_root, "agents", request.adw_id, request.agent_name
@@ -258,7 +230,7 @@ def execute_template(request: AgentTemplateRequest) -> AgentPromptResponse:
     os.makedirs(output_dir, exist_ok=True)
 
     # Build output file path
-    output_file = os.path.join(output_dir, "raw_output.jsonl")
+    output_file = os.path.join(output_dir, "raw_output.txt")
 
     # Create prompt request with specific parameters
     # Note: dangerously_skip_permissions=False to ensure custom slash commands are loaded
@@ -271,5 +243,5 @@ def execute_template(request: AgentTemplateRequest) -> AgentPromptResponse:
         output_file=output_file,
     )
 
-    # Execute and return response (prompt_claude_code now handles all parsing)
+    # Execute and return response
     return prompt_claude_code(prompt_request)

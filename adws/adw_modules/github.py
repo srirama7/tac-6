@@ -22,31 +22,22 @@ from .data_types import GitHubIssue, GitHubIssueListItem
 
 
 def get_github_env() -> Optional[dict]:
-    """Get environment with GitHub token set up. Returns None if no GITHUB_PAT.
-    
+    """Get environment with GitHub token set up. Returns None to use parent env.
+
     Subprocess env behavior:
-    - env=None → Inherits parent's environment (default)
+    - env=None → Inherits parent's environment (default) - BEST for gh CLI
     - env={} → Empty environment (no variables)
     - env=custom_dict → Only uses specified variables
-    
-    So this will work with gh authentication:
-    # These are equivalent:
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    result = subprocess.run(cmd, capture_output=True, text=True, env=None)
-    
-    But this will NOT work (no PATH, no auth):
-    result = subprocess.run(cmd, capture_output=True, text=True, env={})
+
+    We always return None to inherit the full parent environment because:
+    1. gh CLI uses default authentication from keyring/config
+    2. A minimal env breaks on Windows (missing SystemRoot, TEMP, etc.)
+    3. GITHUB_PAT can be set in parent environment if needed
     """
-    github_pat = os.getenv("GITHUB_PAT")
-    if not github_pat:
-        return None
-    
-    # Only create minimal env with GitHub token
-    env = {
-        "GH_TOKEN": github_pat,
-        "PATH": os.environ.get("PATH", ""),
-    }
-    return env
+    # Always return None to inherit full parent environment
+    # This ensures gh CLI can use its default authentication and all
+    # necessary system variables are available
+    return None
 
 
 def get_repo_url() -> str:
@@ -91,7 +82,7 @@ def fetch_issue(issue_number: str, repo_path: str) -> GitHubIssue:
     env = get_github_env()
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, encoding='utf-8')
 
         if result.returncode == 0:
             # Parse JSON response into Pydantic model
@@ -142,7 +133,7 @@ def make_issue_comment(issue_id: str, comment: str) -> None:
     env = get_github_env()
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, encoding='utf-8')
 
         if result.returncode == 0:
             print(f"Successfully posted comment to issue #{issue_id}")
@@ -176,7 +167,7 @@ def mark_issue_in_progress(issue_id: str) -> None:
     env = get_github_env()
 
     # Try to add label (may fail if label doesn't exist)
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env, encoding='utf-8')
     if result.returncode != 0:
         print(f"Note: Could not add 'in_progress' label: {result.stderr}")
 
@@ -194,7 +185,7 @@ def mark_issue_in_progress(issue_id: str) -> None:
         "--add-assignee",
         "@me",
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env, encoding='utf-8')
     if result.returncode == 0:
         print(f"Assigned issue #{issue_id} to self")
 

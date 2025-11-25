@@ -117,13 +117,13 @@ async function loadDatabaseSchema() {
 
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
+
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+
   resultsSection.style.display = 'block';
-  
+
   // Display natural language query and SQL
   sqlDisplay.innerHTML = `
     <div class="query-display">
@@ -133,7 +133,7 @@ function displayResults(response: QueryResponse, query: string) {
       <strong>SQL:</strong> <code>${response.sql}</code>
     </div>
   `;
-  
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
@@ -144,13 +144,17 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
+
   // Initialize toggle button
   const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
   toggleButton.addEventListener('click', () => {
     resultsContainer.style.display = resultsContainer.style.display === 'none' ? 'block' : 'none';
     toggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
   });
+
+  // Initialize download button
+  const downloadButton = document.getElementById('download-results') as HTMLButtonElement;
+  downloadButton.onclick = () => downloadQueryResults(query);
 }
 
 // Create results table
@@ -219,15 +223,29 @@ function displayTables(tables: TableSchema[]) {
     
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
-    
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.gap = '0.5rem';
+    buttonContainer.style.alignItems = 'center';
+
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-table-button';
+    downloadButton.innerHTML = '⬇';
+    downloadButton.title = 'Download table as CSV';
+    downloadButton.onclick = () => downloadTable(table.name);
+
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
+    buttonContainer.appendChild(downloadButton);
+    buttonContainer.appendChild(removeButton);
+
     tableHeader.appendChild(tableLeft);
-    tableHeader.appendChild(removeButton);
+    tableHeader.appendChild(buttonContainer);
     
     // Columns section
     const tableColumns = document.createElement('div');
@@ -330,6 +348,45 @@ function initializeModal() {
       await loadSampleData(sampleType!);
     });
   });
+}
+
+// Download table as CSV
+async function downloadTable(tableName: string) {
+  try {
+    const blob = await api.exportTable(tableName);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${tableName}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Failed to download table:', error);
+    alert('Failed to download table. Please try again.');
+  }
+}
+
+// Download query results as CSV
+async function downloadQueryResults(query: string) {
+  try {
+    const blob = await api.exportQueryResults({
+      query,
+      llm_provider: 'openai'
+    });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'query_results.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Failed to download query results:', error);
+    alert('Failed to download query results. Please try again.');
+  }
 }
 
 // Remove table

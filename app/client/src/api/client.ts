@@ -75,5 +75,35 @@ export const api = {
   // Health check
   async healthCheck(): Promise<HealthCheckResponse> {
     return apiRequest<HealthCheckResponse>('/health');
+  },
+
+  // Export table to CSV
+  async exportTable(tableName: string): Promise<Blob> {
+    const url = `${API_BASE_URL}/export/table/${tableName}`;
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.blob();
+  },
+
+  // Export query results to CSV
+  async exportQueryResults(request: QueryRequest): Promise<Blob> {
+    const url = `${API_BASE_URL}/export/query-results`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(request)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.blob();
   }
 };
