@@ -36,6 +36,7 @@ SlashCommand = Literal[
     "/resolve_failed_test",
     "/test_e2e",
     "/resolve_failed_e2e_test",
+    "/review",
 ]
 
 
@@ -194,3 +195,23 @@ class ADWStateData(BaseModel):
     branch_name: Optional[str] = None
     plan_file: Optional[str] = None
     issue_class: Optional[IssueClassSlashCommand] = None
+
+
+class ReviewIssue(BaseModel):
+    """Individual review issue found during code review."""
+
+    review_issue_number: int
+    screenshot_path: str = ""
+    issue_description: str
+    issue_resolution: str
+    issue_severity: Literal["blocker", "tech_debt", "skippable"]
+    screenshot_url: Optional[str] = None
+
+
+class ReviewResult(BaseModel):
+    """Result of code review against specification."""
+
+    success: bool
+    review_issues: List[ReviewIssue] = []
+    screenshots: List[str] = []
+    screenshot_urls: List[str] = []

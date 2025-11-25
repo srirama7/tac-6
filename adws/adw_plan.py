@@ -36,7 +36,6 @@ from adw_modules.github import (
 from adw_modules.workflow_ops import (
     classify_issue,
     build_plan,
-    get_plan_file,
     generate_branch_name,
     create_commit,
     format_issue_message,
@@ -49,11 +48,16 @@ from adw_modules.data_types import GitHubIssue, IssueClassSlashCommand
 
 def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
     """Check that all required environment variables are set."""
+    # CLAUDE_CODE_PATH is required, ANTHROPIC_API_KEY is optional
+    # Claude Code CLI can use its own authentication if API key is not set
     required_vars = [
-        "ANTHROPIC_API_KEY",
         "CLAUDE_CODE_PATH",
     ]
+    optional_vars = [
+        "ANTHROPIC_API_KEY",
+    ]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
+    missing_optional = [var for var in optional_vars if not os.getenv(var)]
 
     if missing_vars:
         error_msg = "Error: Missing required environment variables:"
@@ -66,6 +70,17 @@ def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
             for var in missing_vars:
                 print(f"  - {var}", file=sys.stderr)
         sys.exit(1)
+
+    if missing_optional:
+        warn_msg = "Warning: Optional environment variables not set (Claude Code will use its own auth):"
+        if logger:
+            logger.warning(warn_msg)
+            for var in missing_optional:
+                logger.warning(f"  - {var}")
+        else:
+            print(warn_msg, file=sys.stderr)
+            for var in missing_optional:
+                print(f"  - {var}", file=sys.stderr)
 
 
 def main():
@@ -196,17 +211,55 @@ def main():
         format_issue_message(adw_id, AGENT_PLANNER, "✅ Implementation plan created"),
     )
 
-    # Find the plan file that was created
-    logger.info("Finding plan file")
-    plan_file_path, error = get_plan_file(
-        plan_response.output, issue_number, adw_id, logger
-    )
+    # Get the plan file path from response
+    logger.info("Getting plan file path")
+    plan_output = plan_response.output.strip()
 
-    if error:
-        logger.error(f"Error finding plan file: {error}")
+    # Try to extract file path from verbose response
+    # Look for patterns like: **Path:** `specs/...` or Path: specs/...
+    import re
+    plan_file_path = None
+
+    # Pattern 1: **Path:** `path`
+    path_match = re.search(r'\*\*Path:\*\*\s*`([^`]+)`', plan_output)
+    if path_match:
+        plan_file_path = path_match.group(1)
+
+    # Pattern 2: Plain path ending with .md
+    if not plan_file_path:
+        path_match = re.search(r'(specs/[^\s\n]+\.md)', plan_output)
+        if path_match:
+            plan_file_path = path_match.group(1)
+
+    # Pattern 3: If the output is just a path
+    if not plan_file_path and plan_output.endswith('.md') and os.path.exists(plan_output):
+        plan_file_path = plan_output
+
+    # Pattern 4: Look for plan file in specs directory matching issue and adw_id
+    if not plan_file_path:
+        import glob
+        pattern = f"specs/*{issue_number}*{adw_id}*.md"
+        matches = glob.glob(pattern)
+        if matches:
+            plan_file_path = matches[0]
+            logger.info(f"Found plan file via glob: {plan_file_path}")
+
+    # Validate the path exists
+    if not plan_file_path:
+        error = f"No plan file path found in response: {plan_output[:200]}..."
+        logger.error(error)
         make_issue_comment(
             issue_number,
-            format_issue_message(adw_id, "ops", f"❌ Error finding plan file: {error}"),
+            format_issue_message(adw_id, "ops", f"❌ {error}"),
+        )
+        sys.exit(1)
+
+    if not os.path.exists(plan_file_path):
+        error = f"Plan file does not exist: {plan_file_path}"
+        logger.error(error)
+        make_issue_comment(
+            issue_number,
+            format_issue_message(adw_id, "ops", f"❌ {error}"),
         )
         sys.exit(1)
 

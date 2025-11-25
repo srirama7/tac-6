@@ -45,7 +45,7 @@ def parse_jsonl_output(
         Tuple of (all_messages, result_message) where result_message is None if not found
     """
     try:
-        with open(output_file, "r") as f:
+        with open(output_file, "r", encoding="utf-8") as f:
             # Read all lines and parse each as JSON
             messages = [json.loads(line) for line in f if line.strip()]
 
@@ -78,7 +78,7 @@ def convert_jsonl_to_json(jsonl_file: str) -> str:
     messages, _ = parse_jsonl_output(jsonl_file)
 
     # Write as JSON array
-    with open(json_file, "w") as f:
+    with open(json_file, "w", encoding="utf-8") as f:
         json.dump(messages, f, indent=2)
 
     print(f"Created JSON file: {json_file}")
@@ -86,50 +86,37 @@ def convert_jsonl_to_json(jsonl_file: str) -> str:
 
 
 def get_claude_env() -> Dict[str, str]:
-    """Get only the required environment variables for Claude Code execution.
+    """Get environment variables for Claude Code execution.
 
-    Returns a dictionary containing only the necessary environment variables
-    based on .env.sample configuration.
-
-    Subprocess env behavior:
-    - env=None → Inherits parent's environment (default)
-    - env={} → Empty environment (no variables)
-    - env=custom_dict → Only uses specified variables
-
-    So this will work with gh authentication:
-    # These are equivalent:
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    result = subprocess.run(cmd, capture_output=True, text=True, env=None)
-
-    But this will NOT work (no PATH, no auth):
-    result = subprocess.run(cmd, capture_output=True, text=True, env={})
+    Returns a copy of the current environment with ADW-specific variables added.
+    This ensures cross-platform compatibility (Windows/Linux/Mac) by inheriting
+    all system environment variables.
     """
-    required_env_vars = {
-        # Anthropic Configuration (required)
-        "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
-        # Claude Code Configuration
-        "CLAUDE_CODE_PATH": os.getenv("CLAUDE_CODE_PATH", "claude"),
-        "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": os.getenv(
-            "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR", "true"
-        ),
-        # Agent Cloud Sandbox Environment (optional)
-        "E2B_API_KEY": os.getenv("E2B_API_KEY"),
-        # Basic environment variables Claude Code might need
-        "HOME": os.getenv("HOME"),
-        "USER": os.getenv("USER"),
-        "PATH": os.getenv("PATH"),
-        "SHELL": os.getenv("SHELL"),
-        "TERM": os.getenv("TERM"),
-    }
+    # Start with a copy of the current environment for cross-platform compatibility
+    env = os.environ.copy()
 
-    # Only add GitHub tokens if GITHUB_PAT exists
+    # Add/override ADW-specific variables
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        env["ANTHROPIC_API_KEY"] = anthropic_key
+
+    env["CLAUDE_CODE_PATH"] = os.getenv("CLAUDE_CODE_PATH", "claude")
+    env["CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"] = os.getenv(
+        "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR", "true"
+    )
+
+    # Add E2B API key if available
+    e2b_key = os.getenv("E2B_API_KEY")
+    if e2b_key:
+        env["E2B_API_KEY"] = e2b_key
+
+    # Add GitHub tokens if GITHUB_PAT exists
     github_pat = os.getenv("GITHUB_PAT")
     if github_pat:
-        required_env_vars["GITHUB_PAT"] = github_pat
-        required_env_vars["GH_TOKEN"] = github_pat  # Claude Code uses GH_TOKEN
+        env["GITHUB_PAT"] = github_pat
+        env["GH_TOKEN"] = github_pat  # Claude Code uses GH_TOKEN
 
-    # Filter out None values
-    return {k: v for k, v in required_env_vars.items() if v is not None}
+    return env
 
 
 def save_prompt(prompt: str, adw_id: str, agent_name: str = "ops") -> None:
@@ -149,9 +136,9 @@ def save_prompt(prompt: str, adw_id: str, agent_name: str = "ops") -> None:
     prompt_dir = os.path.join(project_root, "agents", adw_id, agent_name, "prompts")
     os.makedirs(prompt_dir, exist_ok=True)
 
-    # Save prompt to file
+    # Save prompt to file with UTF-8 encoding for cross-platform compatibility
     prompt_file = os.path.join(prompt_dir, f"{command_name}.txt")
-    with open(prompt_file, "w") as f:
+    with open(prompt_file, "w", encoding="utf-8") as f:
         f.write(prompt)
 
     print(f"Saved prompt to: {prompt_file}")
@@ -187,8 +174,8 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
     env = get_claude_env()
 
     try:
-        # Execute Claude Code and pipe output to file
-        with open(request.output_file, "w") as f:
+        # Execute Claude Code and pipe output to file with UTF-8 encoding
+        with open(request.output_file, "w", encoding="utf-8") as f:
             result = subprocess.run(
                 cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env
             )
@@ -224,7 +211,7 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
                 )
             else:
                 # No result message found, return raw output
-                with open(request.output_file, "r") as f:
+                with open(request.output_file, "r", encoding="utf-8") as f:
                     raw_output = f.read()
                 return AgentPromptResponse(
                     output=raw_output, success=True, session_id=None
