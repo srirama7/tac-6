@@ -494,8 +494,10 @@ def run_e2e_tests(
     """Run all E2E tests found in .claude/commands/e2e/*.md sequentially."""
     import glob
 
-    # Find all E2E test files
-    e2e_test_files = glob.glob(".claude/commands/e2e/*.md")
+    # Find all E2E test files - use project root path
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    e2e_pattern = os.path.join(project_root, ".claude", "commands", "e2e", "*.md")
+    e2e_test_files = glob.glob(e2e_pattern)
     logger.info(f"Found {len(e2e_test_files)} E2E test files")
 
     if not e2e_test_files:
