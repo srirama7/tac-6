@@ -300,6 +300,36 @@ h2 {
   margin-left: 0.25rem;
 }
 
+.download-table-button,
+.download-results-button {
+  background: none;
+  border: 2px solid var(--primary-color);
+  font-size: 1.25rem;
+  color: var(--primary-color);
+  cursor: pointer;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+  font-weight: bold;
+}
+
+.download-table-button:hover,
+.download-results-button:hover {
+  background: var(--primary-color);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.download-table-button:active,
+.download-results-button:active {
+  transform: translateY(0);
+}
+
 .remove-table-button {
   background: none;
   border: none;

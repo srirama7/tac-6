@@ -75,5 +75,47 @@ export const api = {
   // Health check
   async healthCheck(): Promise<HealthCheckResponse> {
     return apiRequest<HealthCheckResponse>('/health');
+  },
+
+  // Export table as CSV
+  async exportTable(tableName: string): Promise<Blob> {
+    const url = `${API_BASE_URL}/export/table/${encodeURIComponent(tableName)}`;
+
+    try {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Failed to export table: ${response.status}`);
+      }
+
+      return await response.blob();
+    } catch (error) {
+      console.error('Table export failed:', error);
+      throw error;
+    }
+  },
+
+  // Export query results as CSV
+  async exportQueryResult(request: QueryResultExportRequest): Promise<Blob> {
+    const url = `${API_BASE_URL}/export/query-result`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(request)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to export query results: ${response.status}`);
+      }
+
+      return await response.blob();
+    } catch (error) {
+      console.error('Query result export failed:', error);
+      throw error;
+    }
   }
 };

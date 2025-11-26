@@ -2,6 +2,7 @@ import './style.css'
 import { api } from './api/client'
 
 // Global state
+let currentQueryResults: QueryResponse | null = null;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -117,13 +118,15 @@ async function loadDatabaseSchema() {
 
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
+  // Store current query results for download
+  currentQueryResults = response;
+
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+
   resultsSection.style.display = 'block';
-  
+
   // Display natural language query and SQL
   sqlDisplay.innerHTML = `
     <div class="query-display">
@@ -133,7 +136,7 @@ function displayResults(response: QueryResponse, query: string) {
       <strong>SQL:</strong> <code>${response.sql}</code>
     </div>
   `;
-  
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
@@ -144,13 +147,44 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
-  // Initialize toggle button
-  const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
+
+  // Update results header with download button
+  const resultsHeader = resultsSection.querySelector('.results-header') as HTMLElement;
+
+  // Remove existing buttons to avoid duplicates
+  const existingButtons = resultsHeader.querySelector('.results-buttons');
+  if (existingButtons) {
+    existingButtons.remove();
+  }
+
+  // Create button container
+  const buttonContainer = document.createElement('div');
+  buttonContainer.className = 'results-buttons';
+  buttonContainer.style.display = 'flex';
+  buttonContainer.style.gap = '0.5rem';
+
+  // Create download button (only if we have results)
+  if (!response.error && response.results.length > 0) {
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-results-button';
+    downloadButton.innerHTML = '↓';
+    downloadButton.title = 'Download as CSV';
+    downloadButton.onclick = downloadQueryResults;
+    buttonContainer.appendChild(downloadButton);
+  }
+
+  // Create toggle button
+  const toggleButton = document.createElement('button');
+  toggleButton.id = 'toggle-results';
+  toggleButton.className = 'toggle-button';
+  toggleButton.textContent = 'Hide';
   toggleButton.addEventListener('click', () => {
     resultsContainer.style.display = resultsContainer.style.display === 'none' ? 'block' : 'none';
     toggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
   });
+  buttonContainer.appendChild(toggleButton);
+
+  resultsHeader.appendChild(buttonContainer);
 }
 
 // Create results table
@@ -219,15 +253,30 @@ function displayTables(tables: TableSchema[]) {
     
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
-    
+
+    // Create button container for download and remove buttons
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.gap = '0.5rem';
+    buttonContainer.style.alignItems = 'center';
+
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-table-button';
+    downloadButton.innerHTML = '↓';
+    downloadButton.title = 'Download as CSV';
+    downloadButton.onclick = () => downloadTable(table.name);
+
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
+    buttonContainer.appendChild(downloadButton);
+    buttonContainer.appendChild(removeButton);
+
     tableHeader.appendChild(tableLeft);
-    tableHeader.appendChild(removeButton);
+    tableHeader.appendChild(buttonContainer);
     
     // Columns section
     const tableColumns = document.createElement('div');
@@ -290,13 +339,36 @@ function displayError(message: string) {
   const errorDiv = document.createElement('div');
   errorDiv.className = 'error-message';
   errorDiv.textContent = message;
-  
+
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
   resultsContainer.innerHTML = '';
   resultsContainer.appendChild(errorDiv);
-  
+
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   resultsSection.style.display = 'block';
+}
+
+// Show success message
+function showSuccessMessage(message: string) {
+  const successDiv = document.createElement('div');
+  successDiv.className = 'success-message';
+  successDiv.textContent = message;
+  successDiv.style.cssText = `
+    background: rgba(40, 167, 69, 0.1);
+    border: 1px solid var(--success-color);
+    color: var(--success-color);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  `;
+
+  const tablesSection = document.getElementById('tables-section') as HTMLElement;
+  tablesSection.insertBefore(successDiv, tablesSection.firstChild);
+
+  // Remove success message after 3 seconds
+  setTimeout(() => {
+    successDiv.remove();
+  }, 3000);
 }
 
 // Initialize modal
@@ -330,6 +402,61 @@ function initializeModal() {
       await loadSampleData(sampleType!);
     });
   });
+}
+
+// Download table as CSV
+async function downloadTable(tableName: string) {
+  try {
+    const blob = await api.exportTable(tableName);
+
+    // Create temporary download link
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${tableName}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    // Show success message
+    showSuccessMessage(`Table "${tableName}" downloaded successfully!`);
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to download table');
+  }
+}
+
+// Download query results as CSV
+async function downloadQueryResults() {
+  if (!currentQueryResults) {
+    displayError('No query results to download');
+    return;
+  }
+
+  try {
+    const blob = await api.exportQueryResult({
+      sql: currentQueryResults.sql,
+      columns: currentQueryResults.columns,
+      results: currentQueryResults.results
+    });
+
+    // Create temporary download link
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    a.download = `query_result_${timestamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    // Show success message
+    showSuccessMessage('Query results downloaded successfully!');
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to download query results');
+  }
 }
 
 // Remove table

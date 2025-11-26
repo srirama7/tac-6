@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from datetime import datetime
 import os
 import sqlite3
@@ -17,7 +18,8 @@ from core.data_models import (
     InsightsResponse,
     HealthCheckResponse,
     TableSchema,
-    ColumnInfo
+    ColumnInfo,
+    QueryResultExportRequest
 )
 from core.file_processor import convert_csv_to_sqlite, convert_json_to_sqlite, convert_jsonl_to_sqlite
 from core.llm_processor import generate_sql
@@ -29,6 +31,7 @@ from core.sql_security import (
     check_table_exists,
     SQLSecurityError
 )
+from core.csv_exporter import generate_csv_from_data, sanitize_filename
 
 # Load .env file from server directory
 load_dotenv()
@@ -206,6 +209,109 @@ async def generate_insights_endpoint(request: InsightsRequest) -> InsightsRespon
             generated_at=datetime.now(),
             error=str(e)
         )
+
+@app.get("/api/export/table/{table_name}")
+async def export_table(table_name: str):
+    """Export entire table as CSV file"""
+    try:
+        # Validate table name using security module
+        try:
+            validate_identifier(table_name, "table")
+        except SQLSecurityError as e:
+            logger.error(f"[ERROR] Invalid table name for export: {table_name}")
+            raise HTTPException(400, str(e))
+
+        # Connect to database
+        conn = sqlite3.connect("db/database.db")
+
+        # Check if table exists
+        if not check_table_exists(conn, table_name):
+            conn.close()
+            logger.error(f"[ERROR] Table not found for export: {table_name}")
+            raise HTTPException(404, f"Table '{table_name}' not found")
+
+        # Fetch all table data using secure query execution
+        conn.row_factory = sqlite3.Row  # Enable column access by name
+        cursor = execute_query_safely(
+            conn,
+            "SELECT * FROM {table}",
+            identifier_params={'table': table_name}
+        )
+
+        # Get results
+        db_rows = cursor.fetchall()
+
+        # Convert rows to dictionaries and extract columns
+        columns = []
+        rows = []
+
+        if db_rows:
+            columns = list(db_rows[0].keys())
+            for row in db_rows:
+                rows.append(dict(row))
+
+        conn.close()
+
+        # Generate CSV data
+        csv_data = generate_csv_from_data(columns, rows)
+
+        # Create safe filename
+        safe_filename = sanitize_filename(table_name)
+        filename = f"{safe_filename}.csv"
+
+        logger.info(f"[SUCCESS] Table exported: {table_name}, rows: {len(rows)}, filename: {filename}")
+
+        # Return CSV as downloadable file
+        return Response(
+            content=csv_data,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ERROR] Table export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Error exporting table: {str(e)}")
+
+@app.post("/api/export/query-result")
+async def export_query_result(request: QueryResultExportRequest):
+    """Export query results as CSV file"""
+    try:
+        # Validate that we have data to export
+        if not request.columns:
+            raise HTTPException(400, "No columns provided for export")
+
+        if not request.results:
+            logger.info("[INFO] Exporting empty query result")
+
+        # Generate CSV from provided data
+        csv_data = generate_csv_from_data(request.columns, request.results)
+
+        # Create filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"query_result_{timestamp}.csv"
+
+        logger.info(f"[SUCCESS] Query result exported: rows: {len(request.results)}, filename: {filename}")
+
+        # Return CSV as downloadable file
+        return Response(
+            content=csv_data,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ERROR] Query result export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Error exporting query results: {str(e)}")
 
 @app.get("/api/health", response_model=HealthCheckResponse)
 async def health_check() -> HealthCheckResponse:
