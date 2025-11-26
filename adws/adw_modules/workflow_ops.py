@@ -114,22 +114,37 @@ def classify_issue(
     
     # Extract the classification from the response
     output = response.output.strip()
-    
+
     # Look for the classification pattern in the output
     # Claude might add explanation, so we need to extract just the command
-    classification_match = re.search(r'(/chore|/bug|/feature|0)', output)
-    
+    # Try multiple patterns to be more robust
+    classification_match = re.search(r'(/chore|/bug|/feature|0)', output, re.IGNORECASE)
+
     if classification_match:
-        issue_command = classification_match.group(1)
+        issue_command = classification_match.group(1).lower()
+        # Normalize the command
+        if issue_command == "0":
+            return None, f"No command selected: {response.output}"
+        # Ensure proper format
+        if not issue_command.startswith("/"):
+            issue_command = "/" + issue_command
     else:
-        issue_command = output
-    
-    if issue_command == "0":
-        return None, f"No command selected: {response.output}"
-    
+        # Try to infer from keywords in the output
+        output_lower = output.lower()
+        if "feature" in output_lower:
+            issue_command = "/feature"
+        elif "bug" in output_lower or "fix" in output_lower:
+            issue_command = "/bug"
+        elif "chore" in output_lower or "maintenance" in output_lower or "refactor" in output_lower:
+            issue_command = "/chore"
+        else:
+            # Default to /feature for new functionality requests
+            logger.warning(f"Could not parse classification from: {output}, defaulting to /feature")
+            issue_command = "/feature"
+
     if issue_command not in ["/chore", "/bug", "/feature"]:
         return None, f"Invalid command selected: {response.output}"
-    
+
     return issue_command, None  # type: ignore
 
 
