@@ -162,8 +162,8 @@ Rules:
 
 SQL Query:"""
 
-        # Call Gemini API
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Call Gemini API (using gemini-1.5-flash-latest for current API)
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
         response = model.generate_content(prompt)
 
         sql = response.text.strip()
