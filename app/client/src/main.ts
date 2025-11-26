@@ -2,6 +2,7 @@ import './style.css'
 import { api } from './api/client'
 
 // Global state
+let currentSQL: string = '';
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -117,13 +118,16 @@ async function loadDatabaseSchema() {
 
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
+
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+
+  // Store current SQL in global state
+  currentSQL = response.sql;
+
   resultsSection.style.display = 'block';
-  
+
   // Display natural language query and SQL
   sqlDisplay.innerHTML = `
     <div class="query-display">
@@ -133,7 +137,7 @@ function displayResults(response: QueryResponse, query: string) {
       <strong>SQL:</strong> <code>${response.sql}</code>
     </div>
   `;
-  
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
@@ -144,13 +148,37 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
-  // Initialize toggle button
-  const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
+
+  // Update results header with download button
+  const resultsHeader = document.querySelector('.results-header') as HTMLElement;
+  resultsHeader.innerHTML = '';
+
+  const headerTitle = document.createElement('h2');
+  headerTitle.textContent = 'Query Results';
+
+  const headerActions = document.createElement('div');
+  headerActions.className = 'table-actions';
+
+  const downloadButton = document.createElement('button');
+  downloadButton.className = 'download-button';
+  downloadButton.innerHTML = '⬇';
+  downloadButton.title = 'Export results as CSV';
+  downloadButton.onclick = () => exportQueryResultsToCSV(currentSQL);
+
+  const toggleButton = document.createElement('button');
+  toggleButton.id = 'toggle-results';
+  toggleButton.className = 'toggle-button';
+  toggleButton.textContent = 'Hide';
   toggleButton.addEventListener('click', () => {
     resultsContainer.style.display = resultsContainer.style.display === 'none' ? 'block' : 'none';
     toggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
   });
+
+  headerActions.appendChild(downloadButton);
+  headerActions.appendChild(toggleButton);
+
+  resultsHeader.appendChild(headerTitle);
+  resultsHeader.appendChild(headerActions);
 }
 
 // Create results table
@@ -219,15 +247,28 @@ function displayTables(tables: TableSchema[]) {
     
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
-    
+
+    // Create actions container for download and remove buttons
+    const tableActions = document.createElement('div');
+    tableActions.className = 'table-actions';
+
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-button';
+    downloadButton.innerHTML = '⬇';
+    downloadButton.title = 'Export table as CSV';
+    downloadButton.onclick = () => exportTableToCSV(table.name);
+
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
+    tableActions.appendChild(downloadButton);
+    tableActions.appendChild(removeButton);
+
     tableHeader.appendChild(tableLeft);
-    tableHeader.appendChild(removeButton);
+    tableHeader.appendChild(tableActions);
     
     // Columns section
     const tableColumns = document.createElement('div');
@@ -333,6 +374,38 @@ function initializeModal() {
 }
 
 // Remove table
+// Export table to CSV
+async function exportTableToCSV(tableName: string) {
+  try {
+    const blob = await api.exportTable(tableName);
+    downloadBlob(blob, `${tableName}_export.csv`);
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to export table');
+  }
+}
+
+// Export query results to CSV
+async function exportQueryResultsToCSV(sql: string) {
+  try {
+    const blob = await api.exportQueryResults(sql);
+    downloadBlob(blob, `query_results_export.csv`);
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to export query results');
+  }
+}
+
+// Helper function to download blob as file
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 async function removeTable(tableName: string) {
   if (!confirm(`Are you sure you want to remove the table "${tableName}"?`)) {
     return;

@@ -70,6 +70,11 @@ class InsightsResponse(BaseModel):
     generated_at: datetime
     error: Optional[str] = None
 
+# CSV Export Models
+class QueryExportRequest(BaseModel):
+    sql: str = Field(..., description="SQL query to export")
+    filename: Optional[str] = Field(None, description="Optional filename for the export")
+
 # Health Check Models
 class HealthCheckRequest(BaseModel):
     pass

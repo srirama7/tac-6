@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from datetime import datetime
 import os
 import sqlite3
@@ -7,11 +8,14 @@ import traceback
 from dotenv import load_dotenv
 import logging
 import sys
+import csv
+import io
 
 from core.data_models import (
     FileUploadResponse,
     QueryRequest,
     QueryResponse,
+    QueryExportRequest,
     DatabaseSchemaResponse,
     InsightsRequest,
     InsightsResponse,
@@ -238,6 +242,131 @@ async def health_check() -> HealthCheckResponse:
             uptime_seconds=0
         )
 
+@app.get("/api/table/{table_name}/export")
+async def export_table(table_name: str):
+    """Export entire table as CSV file"""
+    try:
+        # Validate table name using security module
+        try:
+            validate_identifier(table_name, "table")
+        except SQLSecurityError as e:
+            raise HTTPException(400, str(e))
+
+        conn = sqlite3.connect("db/database.db")
+
+        # Check if table exists using secure method
+        if not check_table_exists(conn, table_name):
+            conn.close()
+            raise HTTPException(404, f"Table '{table_name}' not found")
+
+        # Execute query to get all table data using safe query execution
+        cursor = execute_query_safely(
+            conn,
+            "SELECT * FROM {table}",
+            identifier_params={'table': table_name},
+            allow_ddl=False
+        )
+
+        # Get column names from cursor description
+        columns = [description[0] for description in cursor.description]
+        rows = cursor.fetchall()
+        conn.close()
+
+        # Generate CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        # Write header row
+        writer.writerow(columns)
+
+        # Write data rows
+        for row in rows:
+            writer.writerow(row)
+
+        # Get CSV content and encode with UTF-8 BOM for Excel compatibility
+        csv_content = output.getvalue()
+        output.close()
+
+        # Create filename with timestamp
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+        filename = f"{table_name}_{timestamp}.csv"
+
+        # Return as streaming response with proper headers
+        logger.info(f"[SUCCESS] Table export: {table_name} ({len(rows)} rows)")
+        return StreamingResponse(
+            io.BytesIO(csv_content.encode('utf-8-sig')),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ERROR] Table export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Error exporting table: {str(e)}")
+
+@app.post("/api/query/export")
+async def export_query_results(request: QueryExportRequest):
+    """Export query results as CSV file"""
+    try:
+        # Execute the SQL query using the safe execution from sql_processor
+        result = execute_sql_safely(request.sql)
+
+        # Check for errors
+        if result.get('error'):
+            logger.error(f"[ERROR] Query execution failed: {result['error']}")
+            raise HTTPException(400, f"Invalid SQL query: {result['error']}")
+
+        # Get columns and rows from the result
+        columns = result.get('columns', [])
+        rows_as_dicts = result.get('results', [])
+
+        # Convert dict rows to tuples for CSV writer
+        rows = []
+        for row_dict in rows_as_dicts:
+            rows.append([row_dict.get(col) for col in columns])
+
+        # Generate CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        # Write header row
+        writer.writerow(columns)
+
+        # Write data rows
+        for row in rows:
+            writer.writerow(row)
+
+        # Get CSV content and encode with UTF-8 BOM for Excel compatibility
+        csv_content = output.getvalue()
+        output.close()
+
+        # Create filename with timestamp or use provided filename
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+        if request.filename:
+            # Use provided filename, ensure it ends with .csv
+            filename = request.filename if request.filename.endswith('.csv') else f"{request.filename}.csv"
+        else:
+            filename = f"query_results_{timestamp}.csv"
+
+        # Return as streaming response with proper headers
+        logger.info(f"[SUCCESS] Query export: ({len(rows)} rows)")
+        return StreamingResponse(
+            io.BytesIO(csv_content.encode('utf-8-sig')),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ERROR] Query export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Error exporting query results: {str(e)}")
+
 @app.delete("/api/table/{table_name}")
 async def delete_table(table_name: str):
     """Delete a table from the database"""
@@ -247,14 +376,14 @@ async def delete_table(table_name: str):
             validate_identifier(table_name, "table")
         except SQLSecurityError as e:
             raise HTTPException(400, str(e))
-        
+
         conn = sqlite3.connect("db/database.db")
-        
+
         # Check if table exists using secure method
         if not check_table_exists(conn, table_name):
             conn.close()
             raise HTTPException(404, f"Table '{table_name}' not found")
-        
+
         # Drop the table using safe query execution with DDL permission
         execute_query_safely(
             conn,
@@ -264,7 +393,7 @@ async def delete_table(table_name: str):
         )
         conn.commit()
         conn.close()
-        
+
         response = {"message": f"Table '{table_name}' deleted successfully"}
         logger.info(f"[SUCCESS] Table deleted: {table_name}")
         return response
