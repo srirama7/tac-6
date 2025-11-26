@@ -75,5 +75,47 @@ export const api = {
   // Health check
   async healthCheck(): Promise<HealthCheckResponse> {
     return apiRequest<HealthCheckResponse>('/health');
+  },
+
+  // Export table as CSV
+  async exportTable(tableName: string): Promise<void> {
+    const url = `${API_BASE_URL}/table/${tableName}/export`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to export table: ${response.statusText}`);
+    }
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `${tableName}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  },
+
+  // Export query results as CSV
+  async exportResults(columns: string[], results: Record<string, unknown>[]): Promise<void> {
+    const url = `${API_BASE_URL}/export-results`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ columns, results })
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to export results: ${response.statusText}`);
+    }
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = 'query_results.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
   }
 };

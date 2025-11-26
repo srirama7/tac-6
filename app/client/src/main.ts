@@ -2,6 +2,7 @@ import './style.css'
 import { api } from './api/client'
 
 // Global state
+let currentQueryResults: QueryResponse | null = null;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -117,13 +118,15 @@ async function loadDatabaseSchema() {
 
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
+  // Store results globally for export
+  currentQueryResults = response;
+
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+
   resultsSection.style.display = 'block';
-  
+
   // Display natural language query and SQL
   sqlDisplay.innerHTML = `
     <div class="query-display">
@@ -133,7 +136,7 @@ function displayResults(response: QueryResponse, query: string) {
       <strong>SQL:</strong> <code>${response.sql}</code>
     </div>
   `;
-  
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
@@ -144,13 +147,40 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
+
+  // Get or create results header controls
+  const resultsHeader = resultsSection.querySelector('.results-header') as HTMLElement;
+  if (resultsHeader) {
+    // Remove existing buttons to avoid duplicates
+    const existingExportBtn = resultsHeader.querySelector('.export-results-button');
+    if (existingExportBtn) existingExportBtn.remove();
+
+    const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
+
+    // Create export button to the left of toggle button
+    const exportButton = document.createElement('button');
+    exportButton.className = 'export-results-button';
+    exportButton.innerHTML = '⬇';
+    exportButton.title = 'Export results as CSV';
+    exportButton.onclick = async () => {
+      if (currentQueryResults && currentQueryResults.results.length > 0) {
+        try {
+          await api.exportResults(currentQueryResults.columns, currentQueryResults.results);
+        } catch (error) {
+          displayError(error instanceof Error ? error.message : 'Export failed');
+        }
+      }
+    };
+
+    toggleButton.parentNode?.insertBefore(exportButton, toggleButton);
+  }
+
   // Initialize toggle button
   const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
-  toggleButton.addEventListener('click', () => {
+  toggleButton.onclick = () => {
     resultsContainer.style.display = resultsContainer.style.display === 'none' ? 'block' : 'none';
     toggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
-  });
+  };
 }
 
 // Create results table
@@ -220,14 +250,36 @@ function displayTables(tables: TableSchema[]) {
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
     
+    // Create buttons container for export and remove
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.style.display = 'flex';
+    buttonsContainer.style.alignItems = 'center';
+    buttonsContainer.style.gap = '0.5rem';
+
+    // Export button (download icon)
+    const exportButton = document.createElement('button');
+    exportButton.className = 'export-table-button';
+    exportButton.innerHTML = '⬇';
+    exportButton.title = 'Export table as CSV';
+    exportButton.onclick = async () => {
+      try {
+        await api.exportTable(table.name);
+      } catch (error) {
+        displayError(error instanceof Error ? error.message : 'Export failed');
+      }
+    };
+
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
+    buttonsContainer.appendChild(exportButton);
+    buttonsContainer.appendChild(removeButton);
+
     tableHeader.appendChild(tableLeft);
-    tableHeader.appendChild(removeButton);
+    tableHeader.appendChild(buttonsContainer);
     
     // Columns section
     const tableColumns = document.createElement('div');

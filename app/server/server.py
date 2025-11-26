@@ -1,9 +1,12 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from datetime import datetime
 import os
 import sqlite3
 import traceback
+import io
+import csv
 from dotenv import load_dotenv
 import logging
 import sys
@@ -274,6 +277,92 @@ async def delete_table(table_name: str):
         logger.error(f"[ERROR] Table deletion failed: {str(e)}")
         logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(500, f"Error deleting table: {str(e)}")
+
+@app.get("/api/table/{table_name}/export")
+async def export_table(table_name: str):
+    """Export a table as CSV file"""
+    try:
+        # Validate table name using security module
+        try:
+            validate_identifier(table_name, "table")
+        except SQLSecurityError as e:
+            raise HTTPException(400, str(e))
+
+        conn = sqlite3.connect("db/database.db")
+
+        # Check if table exists using secure method
+        if not check_table_exists(conn, table_name):
+            conn.close()
+            raise HTTPException(404, f"Table '{table_name}' not found")
+
+        # Get all data from table
+        cursor = conn.cursor()
+        cursor.execute(f'SELECT * FROM [{table_name}]')
+        columns = [description[0] for description in cursor.description]
+        rows = cursor.fetchall()
+        conn.close()
+
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(columns)
+        writer.writerows(rows)
+
+        # Return as streaming response
+        output.seek(0)
+        response = StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={table_name}.csv"
+            }
+        )
+        logger.info(f"[SUCCESS] Table exported: {table_name} ({len(rows)} rows)")
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ERROR] Table export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Error exporting table: {str(e)}")
+
+
+@app.post("/api/export-results")
+async def export_results(results: dict):
+    """Export query results as CSV file"""
+    try:
+        columns = results.get("columns", [])
+        data = results.get("results", [])
+
+        if not columns:
+            raise HTTPException(400, "No columns provided")
+
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(columns)
+
+        for row in data:
+            writer.writerow([row.get(col, "") for col in columns])
+
+        # Return as streaming response
+        output.seek(0)
+        response = StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=query_results.csv"
+            }
+        )
+        logger.info(f"[SUCCESS] Results exported: {len(data)} rows")
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ERROR] Results export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Error exporting results: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn

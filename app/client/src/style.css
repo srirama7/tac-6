@@ -300,10 +300,12 @@ h2 {
   margin-left: 0.25rem;
 }
 
-.remove-table-button {
+.remove-table-button,
+.export-table-button,
+.export-results-button {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   color: var(--text-secondary);
   cursor: pointer;
   width: 2rem;
@@ -315,9 +317,19 @@ h2 {
   transition: all 0.2s;
 }
 
+.remove-table-button {
+  font-size: 1.5rem;
+}
+
 .remove-table-button:hover {
   background: rgba(220, 53, 69, 0.1);
   color: var(--error-color);
+}
+
+.export-table-button:hover,
+.export-results-button:hover {
+  background: rgba(102, 126, 234, 0.1);
+  color: var(--primary-color);
 }
 
 /* Loading States */
