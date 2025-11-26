@@ -114,22 +114,32 @@ def classify_issue(
     
     # Extract the classification from the response
     output = response.output.strip()
-    
+
     # Look for the classification pattern in the output
     # Claude might add explanation, so we need to extract just the command
-    classification_match = re.search(r'(/chore|/bug|/feature|0)', output)
-    
+    # Try multiple patterns to be more robust
+
+    # First, try to find explicit slash commands
+    classification_match = re.search(r'(/chore|/bug|/feature)', output, re.IGNORECASE)
+
     if classification_match:
-        issue_command = classification_match.group(1)
+        issue_command = classification_match.group(1).lower()
     else:
-        issue_command = output
-    
-    if issue_command == "0":
-        return None, f"No command selected: {response.output}"
-    
+        # Also check for keywords without slash
+        keyword_match = re.search(r'\b(chore|bug|feature)\b', output, re.IGNORECASE)
+        if keyword_match:
+            issue_command = f"/{keyword_match.group(1).lower()}"
+        elif output == "0" or "none of the above" in output.lower() or "not any" in output.lower():
+            return None, f"No command selected: {response.output}"
+        else:
+            # Default to /feature for general enhancement requests
+            logger.warning(f"Could not classify issue, defaulting to /feature. Raw output: {output}")
+            issue_command = "/feature"
+
+    # Normalize the command
     if issue_command not in ["/chore", "/bug", "/feature"]:
-        return None, f"Invalid command selected: {response.output}"
-    
+        issue_command = "/feature"  # Default fallback
+
     return issue_command, None  # type: ignore
 
 
