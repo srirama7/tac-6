@@ -8,6 +8,7 @@
 .claude/commands/prime.md
 
 ## Run
+- Think through each of these steps to make sure you don't miss anything.
 - Remove the existing git remote: `git remote remove origin`
 - Initialize a new git repository: `git init`
 - Install FE and BE dependencies
@@ -26,3 +27,4 @@
   git remote add origin <your-new-repo-url>
   git push -u origin main
   ```'
+- Mention: If you want to upload images to github during the review process setup cloudflare for public image access you can setup your cloudflare environment variables. See .env.sample for the variables.

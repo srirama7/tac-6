@@ -21,6 +21,7 @@ issue: $3
   - `sdlc_implementor: bug: fix login validation error`
   - `sdlc_planner: chore: update dependencies to latest versions`
 - Extract context from the issue JSON to make the commit message relevant
+- Don't include any 'Generated with...' or 'Authored by...' in the commit message. Focus purely on the changes made.
 
 ## Run
 

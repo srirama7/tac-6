@@ -123,6 +123,7 @@ class AgentPromptRequest(BaseModel):
     model: Literal["sonnet", "opus"] = "sonnet"
     dangerously_skip_permissions: bool = False
     output_file: str
+    cwd: Optional[str] = None  # Working directory for Claude Code execution
 
 
 class AgentPromptResponse(BaseModel):

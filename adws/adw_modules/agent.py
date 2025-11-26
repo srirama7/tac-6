@@ -180,7 +180,7 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
         # Execute Claude Code and pipe output to file with UTF-8 encoding
         with open(request.output_file, "w", encoding="utf-8") as f:
             result = subprocess.run(
-                cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env, encoding="utf-8"
+                cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env, encoding="utf-8", cwd=request.cwd
             )
 
         if result.returncode == 0:
@@ -236,8 +236,15 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
 
 def execute_template(request: AgentTemplateRequest) -> AgentPromptResponse:
     """Execute a Claude Code template with slash command and arguments."""
-    # Construct prompt from slash command and args
-    prompt = f"{request.slash_command} {' '.join(request.args)}"
+    # Try to expand the slash command file directly (workaround for Claude CLI bug)
+    # When prompts start with "/" Claude CLI does not load custom slash commands
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    expanded = expand_slash_command(request.slash_command, request.args, project_root)
+    if expanded:
+        prompt = expanded
+    else:
+        # Fall back to original behavior
+        prompt = f"{request.slash_command} {' '.join(request.args)}"
 
     # Create output directory with adw_id at project root
     # __file__ is in adws/adw_modules/, so we need to go up 3 levels to get to project root
@@ -251,15 +258,42 @@ def execute_template(request: AgentTemplateRequest) -> AgentPromptResponse:
     output_file = os.path.join(output_dir, "raw_output.jsonl")
 
     # Create prompt request with specific parameters
-    # Note: dangerously_skip_permissions=True to allow automatic file writes during ADW workflow
+    # Note: dangerously_skip_permissions=False to allow automatic file writes during ADW workflow
     prompt_request = AgentPromptRequest(
         prompt=prompt,
         adw_id=request.adw_id,
         agent_name=request.agent_name,
         model=request.model,
-        dangerously_skip_permissions=True,
+        dangerously_skip_permissions=False,
         output_file=output_file,
+        cwd=project_root,  # Ensure slash commands are accessible
     )
 
     # Execute and return response (prompt_claude_code now handles all parsing)
     return prompt_claude_code(prompt_request)
+
+
+def expand_slash_command(slash_command: str, args: list, cwd: str) -> str:
+    """Read and expand a slash command file, replacing $1, $2, etc. with args.
+    
+    This is a workaround for Claude Code CLI bug where prompts starting with
+    '/' prevent custom slash commands from loading.
+    """
+    # Remove leading / from command
+    command_name = slash_command.lstrip('/')
+    
+    # Find command file in .claude/commands/
+    command_file = os.path.join(cwd, '.claude', 'commands', f'{command_name}.md')
+    
+    if not os.path.exists(command_file):
+        # Fall back to original behavior if file not found
+        return None
+    
+    with open(command_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Replace $1, $2, etc. with args
+    for i, arg in enumerate(args, 1):
+        content = content.replace(f'${i}', arg)
+    
+    return content

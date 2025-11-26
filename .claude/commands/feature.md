@@ -38,12 +38,20 @@ Focus on the following files:
 - `scripts/**` - Contains the scripts to start and stop the server + client.
 - `adws/**` - Contains the AI Developer Workflow (ADW) scripts.
 
+- Read `.claude/commands/conditional_docs.md` to check if your task requires additional documentation
+- If your task matches any of the conditions listed, include those documentation files in the `Plan Format: Relevant Files` section of your plan
+
 Ignore all other files in the codebase.
 
 ## Plan Format
 
 ```md
 # Feature: <feature name>
+
+## Metadata
+issue_number: `{issue_number}`
+adw_id: `{adw_id}`
+issue_json: `{issue_json}`
 
 ## Feature Description
 <describe the feature in detail, including its purpose and value to users>
@@ -112,5 +120,5 @@ Execute every command to validate the feature works correctly with zero regressi
 Extract the feature details from the `issue_json` variable (parse the JSON and use the title and body fields).
 
 ## Report
-- Summarize the work you've just done in a concise bullet point list.
-- Include the full path to the plan file you created (e.g., `specs/issue-456-adw-xyz789-sdlc_planner-add-auth-system.md`)
+
+- IMPORTANT: Return exclusively the path to the plan file created and nothing else.
