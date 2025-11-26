@@ -49,23 +49,23 @@ from adw_modules.data_types import GitHubIssue, IssueClassSlashCommand
 
 def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
     """Check that all required environment variables are set."""
-    required_vars = [
+    # CLAUDE_CODE_PATH is optional - defaults to "claude"
+    # ANTHROPIC_API_KEY is optional - Claude Code uses its own authentication
+    optional_vars = [
         "ANTHROPIC_API_KEY",
-        "CLAUDE_CODE_PATH",
     ]
-    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    missing_optional = [var for var in optional_vars if not os.getenv(var)]
 
-    if missing_vars:
-        error_msg = "Error: Missing required environment variables:"
+    if missing_optional:
+        warning_msg = "Warning: Optional environment variables not set (Claude Code will use its own auth):"
         if logger:
-            logger.error(error_msg)
-            for var in missing_vars:
-                logger.error(f"  - {var}")
+            logger.warning(warning_msg)
+            for var in missing_optional:
+                logger.warning(f"  - {var}")
         else:
-            print(error_msg, file=sys.stderr)
-            for var in missing_vars:
-                print(f"  - {var}", file=sys.stderr)
-        sys.exit(1)
+            print(warning_msg)
+            for var in missing_optional:
+                print(f"  - {var}")
 
 
 def main():
