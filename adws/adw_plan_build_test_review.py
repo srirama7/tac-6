@@ -20,6 +20,10 @@ The scripts are chained together via persistent state (adw_state.json).
 import subprocess
 import sys
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add the parent directory to Python path to import modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -28,6 +32,17 @@ from adw_modules.utils import setup_logger
 from adw_modules.state import ADWState
 from adw_modules.github import make_issue_comment
 from adw_modules.git_ops import finalize_git_operations
+
+
+def get_env_for_subprocess():
+    """Get environment variables for subprocess execution."""
+    env = os.environ.copy()
+    # Ensure critical variables are passed
+    critical_vars = ["ANTHROPIC_API_KEY", "CLAUDE_CODE_PATH", "GITHUB_PAT", "GH_TOKEN", "PATH", "HOME", "USER"]
+    for var in critical_vars:
+        if var in os.environ:
+            env[var] = os.environ[var]
+    return env
 
 
 def format_issue_message(adw_id: str, agent_name: str, message: str) -> str:
@@ -76,7 +91,7 @@ def main():
         adw_id,
     ]
     print(f"Running: {' '.join(plan_cmd)}")
-    plan = subprocess.run(plan_cmd)
+    plan = subprocess.run(plan_cmd, env=get_env_for_subprocess())
     if plan.returncode != 0:
         logger.error("Planning phase failed")
         make_issue_comment(
@@ -105,7 +120,7 @@ def main():
         adw_id,
     ]
     print(f"Running: {' '.join(build_cmd)}")
-    build = subprocess.run(build_cmd)
+    build = subprocess.run(build_cmd, env=get_env_for_subprocess())
     if build.returncode != 0:
         logger.error("Build phase failed")
         make_issue_comment(
@@ -135,7 +150,7 @@ def main():
         # NOTE: No --skip-e2e flag - E2E tests will run using Playwright MCP
     ]
     print(f"Running: {' '.join(test_cmd)}")
-    test = subprocess.run(test_cmd)
+    test = subprocess.run(test_cmd, env=get_env_for_subprocess())
     if test.returncode != 0:
         logger.warning("Test phase completed with failures - continuing to review")
         make_issue_comment(
