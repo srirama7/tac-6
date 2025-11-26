@@ -61,24 +61,18 @@ MAX_E2E_TEST_RETRY_ATTEMPTS = 2  # E2E ui tests
 
 
 def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
-    """Check that all required environment variables are set."""
-    # CLAUDE_CODE_PATH is optional - defaults to "claude"
-    # ANTHROPIC_API_KEY is optional - Claude Code uses its own authentication
-    optional_vars = [
-        "ANTHROPIC_API_KEY",
-    ]
-    missing_optional = [var for var in optional_vars if not os.getenv(var)]
+    """Check that all required environment variables are set.
 
-    if missing_optional:
-        warning_msg = "Warning: Optional environment variables not set (Claude Code will use its own auth):"
+    Note: ANTHROPIC_API_KEY is optional as Claude Code CLI handles its own authentication.
+    It will use the API key from its config if not set in environment.
+    """
+    # Just log a warning if ANTHROPIC_API_KEY is not set
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        warning_msg = "Warning: ANTHROPIC_API_KEY not set - Claude Code CLI will use its internal authentication"
         if logger:
             logger.warning(warning_msg)
-            for var in missing_optional:
-                logger.warning(f"  - {var}")
         else:
-            print(warning_msg)
-            for var in missing_optional:
-                print(f"  - {var}")
+            print(warning_msg, file=sys.stderr)
 
 
 def parse_args(
