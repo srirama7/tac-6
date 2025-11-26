@@ -2,8 +2,9 @@ import pytest
 import os
 from unittest.mock import patch, MagicMock
 from core.llm_processor import (
-    generate_sql_with_openai, 
-    generate_sql_with_anthropic, 
+    generate_sql_with_openai,
+    generate_sql_with_anthropic,
+    generate_sql_with_gemini,
     format_schema_for_prompt,
     generate_sql
 )
@@ -202,19 +203,19 @@ class TestLLMProcessor:
         
         assert result == ""
     
-    @patch('core.llm_processor.generate_sql_with_openai')
-    def test_generate_sql_openai_key_priority(self, mock_openai_func):
-        # Test that OpenAI is used when OpenAI key exists (regardless of request preference)
-        mock_openai_func.return_value = "SELECT * FROM users"
-        
-        with patch.dict(os.environ, {'OPENAI_API_KEY': 'openai-key', 'ANTHROPIC_API_KEY': 'anthropic-key'}):
+    @patch('core.llm_processor.generate_sql_with_gemini')
+    def test_generate_sql_gemini_key_priority(self, mock_gemini_func):
+        # Test that Gemini is used when Gemini key exists (regardless of request preference)
+        mock_gemini_func.return_value = "SELECT * FROM users"
+
+        with patch.dict(os.environ, {'GEMINI_API_KEY': 'gemini-key', 'OPENAI_API_KEY': 'openai-key', 'ANTHROPIC_API_KEY': 'anthropic-key'}):
             request = QueryRequest(query="Show all users", llm_provider="anthropic")
             schema_info = {'tables': {}}
-            
+
             result = generate_sql(request, schema_info)
-            
+
             assert result == "SELECT * FROM users"
-            mock_openai_func.assert_called_once_with("Show all users", schema_info)
+            mock_gemini_func.assert_called_once_with("Show all users", schema_info)
     
     @patch('core.llm_processor.generate_sql_with_anthropic')
     def test_generate_sql_anthropic_fallback(self, mock_anthropic_func):
@@ -259,16 +260,16 @@ class TestLLMProcessor:
             mock_anthropic_func.assert_called_once_with("Show all customers", schema_info)
     
     @patch('core.llm_processor.generate_sql_with_openai')
-    def test_generate_sql_both_keys_openai_priority(self, mock_openai_func):
-        # Test that OpenAI has priority when both keys exist
+    def test_generate_sql_openai_fallback_no_gemini(self, mock_openai_func):
+        # Test that OpenAI has priority when Gemini key doesn't exist but OpenAI does
         mock_openai_func.return_value = "SELECT * FROM inventory"
-        
-        with patch.dict(os.environ, {'OPENAI_API_KEY': 'openai-key', 'ANTHROPIC_API_KEY': 'anthropic-key'}):
+
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'openai-key', 'ANTHROPIC_API_KEY': 'anthropic-key'}, clear=True):
             request = QueryRequest(query="Show inventory", llm_provider="anthropic")
             schema_info = {'tables': {}}
-            
+
             result = generate_sql(request, schema_info)
-            
+
             assert result == "SELECT * FROM inventory"
             mock_openai_func.assert_called_once_with("Show inventory", schema_info)
     

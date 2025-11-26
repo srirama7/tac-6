@@ -17,7 +17,7 @@ class FileUploadResponse(BaseModel):
 # Query Models  
 class QueryRequest(BaseModel):
     query: str = Field(..., description="Natural language query")
-    llm_provider: Literal["openai", "anthropic"] = "openai"
+    llm_provider: Literal["openai", "anthropic", "gemini"] = "openai"
     table_name: Optional[str] = None  # If querying specific table
 
 class QueryResponse(BaseModel):
@@ -80,3 +80,8 @@ class HealthCheckResponse(BaseModel):
     tables_count: int
     version: str = "1.0.0"
     uptime_seconds: float
+
+# Export Models
+class ExportResultsRequest(BaseModel):
+    results: List[Dict[str, Any]] = Field(..., description="Query results to export")
+    columns: List[str] = Field(..., description="Column names for CSV header")
