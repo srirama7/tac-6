@@ -328,17 +328,71 @@ class TestEndToEndSQLInjection:
 def test_integration_upload_malicious_filename(test_db):
     """Test that malicious filenames are handled safely during upload"""
     from core.file_processor import convert_csv_to_sqlite
-    
+
     # Create a simple CSV content
     csv_content = b"name,age\nAlice,30\nBob,25"
-    
+
     # Try with malicious filename
     malicious_name = "data'; DROP TABLE users; --.csv"
     result = convert_csv_to_sqlite(csv_content, malicious_name)
-    
+
     # The table should be created with a sanitized name
     assert result['table_name'] != malicious_name
     assert "'" not in result['table_name']
     assert ";" not in result['table_name']
     # Verify it's a valid identifier
     validate_identifier(result['table_name'], "table")
+
+
+class TestExportEndpointsSecurity:
+    """Test export endpoints with security enhancements"""
+
+    def test_export_table_validates_table_name(self):
+        """Test that table export endpoint validates table names"""
+        # Test that validate_identifier would reject these
+        malicious_names = [
+            "users'; DROP TABLE users; --",
+            "users' OR '1'='1",
+            "users UNION SELECT * FROM sqlite_master",
+            "'; DELETE FROM users WHERE '1'='1",
+            "../../../etc/passwd",
+            "users; DROP TABLE users"
+        ]
+
+        for name in malicious_names:
+            with pytest.raises(SQLSecurityError):
+                validate_identifier(name, "table")
+
+    def test_export_table_rejects_invalid_identifiers(self):
+        """Test that table export endpoint rejects invalid identifiers"""
+        invalid_names = [
+            "",  # empty
+            "123_table",  # starts with number
+            "user-name",  # contains hyphen
+            "SELECT",  # SQL keyword
+            "DROP"  # SQL keyword
+        ]
+
+        for name in invalid_names:
+            with pytest.raises(SQLSecurityError):
+                validate_identifier(name, "table")
+
+    def test_export_table_special_characters(self):
+        """Test that table names with special characters are handled safely"""
+        # These should be rejected by validate_identifier
+        # The regex allows only alphanumeric, underscores, and spaces
+        # So these characters should all be rejected: ' ; - / * [ ] ( ) = < > ! @ # $ % ^ & | \ ? . , etc.
+        special_char_names = [
+            "table'; DROP--",
+            "table/**/name",
+            "table;name",
+            "table.name",
+            "table-name",
+            "table[name]",
+            "table(name)",
+            "table=name"
+        ]
+
+        for name in special_char_names:
+            with pytest.raises(SQLSecurityError):
+                validate_identifier(name, "table")

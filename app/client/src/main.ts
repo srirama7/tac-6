@@ -1,7 +1,17 @@
 import './style.css'
 import { api } from './api/client'
 
-// Global state
+// Download helper function
+function downloadFile(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -117,13 +127,12 @@ async function loadDatabaseSchema() {
 
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+
   resultsSection.style.display = 'block';
-  
+
   // Display natural language query and SQL
   sqlDisplay.innerHTML = `
     <div class="query-display">
@@ -133,7 +142,7 @@ function displayResults(response: QueryResponse, query: string) {
       <strong>SQL:</strong> <code>${response.sql}</code>
     </div>
   `;
-  
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
@@ -144,12 +153,49 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
+
+  // Update results header with download button
+  const resultsHeader = document.querySelector('.results-header') as HTMLElement;
+  if (resultsHeader) {
+    // Remove old buttons to avoid duplicates
+    const existingDownloadButton = resultsHeader.querySelector('.download-results-button');
+    if (existingDownloadButton) {
+      existingDownloadButton.remove();
+    }
+
+    // Add download button if we have results
+    if (!response.error && response.results.length > 0) {
+      const downloadButton = document.createElement('button');
+      downloadButton.className = 'download-results-button';
+      downloadButton.innerHTML = '&#128229; Download CSV';
+      downloadButton.title = 'Download as CSV';
+      downloadButton.onclick = async () => {
+        downloadButton.disabled = true;
+        try {
+          const blob = await api.exportQueryResults(response.columns, response.results);
+          downloadFile(blob, 'query_results.csv');
+        } catch (error) {
+          displayError(error instanceof Error ? error.message : 'Failed to download results');
+        } finally {
+          downloadButton.disabled = false;
+        }
+      };
+
+      // Insert download button before the toggle button
+      const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
+      resultsHeader.insertBefore(downloadButton, toggleButton);
+    }
+  }
+
   // Initialize toggle button
   const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
-  toggleButton.addEventListener('click', () => {
+  // Remove existing event listeners by cloning the button
+  const newToggleButton = toggleButton.cloneNode(true) as HTMLButtonElement;
+  toggleButton.parentNode?.replaceChild(newToggleButton, toggleButton);
+
+  newToggleButton.addEventListener('click', () => {
     resultsContainer.style.display = resultsContainer.style.display === 'none' ? 'block' : 'none';
-    toggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
+    newToggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
   });
 }
 
@@ -219,15 +265,39 @@ function displayTables(tables: TableSchema[]) {
     
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
-    
+
+    // Button group for download and remove buttons
+    const buttonGroup = document.createElement('div');
+    buttonGroup.style.display = 'flex';
+    buttonGroup.style.gap = '0.5rem';
+
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-table-button';
+    downloadButton.innerHTML = '&#128229;';  // Download emoji
+    downloadButton.title = 'Download as CSV';
+    downloadButton.onclick = async () => {
+      downloadButton.disabled = true;
+      try {
+        const blob = await api.exportTable(table.name);
+        downloadFile(blob, `${table.name}.csv`);
+      } catch (error) {
+        displayError(error instanceof Error ? error.message : 'Failed to download table');
+      } finally {
+        downloadButton.disabled = false;
+      }
+    };
+
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
+    buttonGroup.appendChild(downloadButton);
+    buttonGroup.appendChild(removeButton);
+
     tableHeader.appendChild(tableLeft);
-    tableHeader.appendChild(removeButton);
+    tableHeader.appendChild(buttonGroup);
     
     // Columns section
     const tableColumns = document.createElement('div');

@@ -300,6 +300,31 @@ h2 {
   margin-left: 0.25rem;
 }
 
+.download-table-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.download-table-button:hover {
+  background: rgba(40, 167, 69, 0.1);
+  color: var(--success-color);
+}
+
+.download-table-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .remove-table-button {
   background: none;
   border: none;
@@ -318,6 +343,31 @@ h2 {
 .remove-table-button:hover {
   background: rgba(220, 53, 69, 0.1);
   color: var(--error-color);
+}
+
+.download-results-button {
+  background: var(--success-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-right: 0.5rem;
+}
+
+.download-results-button:hover {
+  background: #218838;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+.download-results-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* Loading States */

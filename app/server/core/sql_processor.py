@@ -1,8 +1,10 @@
 import sqlite3
-from typing import Dict, Any
+import csv
+import io
+from typing import Dict, Any, List
 from .sql_security import (
-    execute_query_safely, 
-    validate_sql_query, 
+    execute_query_safely,
+    validate_sql_query,
     SQLSecurityError
 )
 
@@ -57,6 +59,31 @@ def execute_sql_safely(sql_query: str) -> Dict[str, Any]:
             'columns': [],
             'error': str(e)
         }
+
+def convert_to_csv(columns: List[str], results: List[Dict[str, Any]]) -> str:
+    """
+    Convert query results to CSV format with proper UTF-8 encoding
+
+    Args:
+        columns: List of column names
+        results: List of row dictionaries
+
+    Returns:
+        CSV string with proper UTF-8 encoding
+    """
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=columns, quoting=csv.QUOTE_MINIMAL)
+
+    # Write headers
+    writer.writeheader()
+
+    # Write rows
+    for row in results:
+        # Convert None values to empty strings
+        cleaned_row = {k: ('' if v is None else v) for k, v in row.items()}
+        writer.writerow(cleaned_row)
+
+    return output.getvalue()
 
 def get_database_schema() -> Dict[str, Any]:
     """

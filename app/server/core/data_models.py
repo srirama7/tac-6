@@ -80,3 +80,11 @@ class HealthCheckResponse(BaseModel):
     tables_count: int
     version: str = "1.0.0"
     uptime_seconds: float
+
+# Export Models
+class ExportTableRequest(BaseModel):
+    pass  # table_name comes from path parameter
+
+class ExportQueryRequest(BaseModel):
+    columns: List[str]
+    results: List[Dict[str, Any]]
