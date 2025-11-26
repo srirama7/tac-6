@@ -7,12 +7,12 @@ import io
 import sqlite3
 import pytest
 
-from app.server.core.csv_exporter import (
+from core.csv_exporter import (
     export_table_to_csv,
     export_query_results_to_csv,
     CSVExportError,
 )
-from app.server.core.sql_security import SQLSecurityError
+from core.sql_security import SQLSecurityError
 
 
 @pytest.fixture

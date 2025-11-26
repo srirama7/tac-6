@@ -4,7 +4,6 @@ from unittest.mock import patch, MagicMock
 from core.llm_processor import (
     generate_sql_with_openai,
     generate_sql_with_anthropic,
-    generate_sql_with_gemini,
     format_schema_for_prompt,
     generate_sql
 )

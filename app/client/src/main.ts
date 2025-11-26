@@ -509,46 +509,52 @@ async function handleTableExport(tableName: string, button: HTMLButtonElement) {
   }
 }
 
-// Handle query results export
-async function handleResultsExport(button: HTMLButtonElement) {
-  if (!currentQueryResults) {
-    alert('No query results to export');
-    return;
-  }
+// Initialize download buttons for query results
+function initializeDownloadButtons() {
+  const downloadResultsButton = document.getElementById('download-results-button') as HTMLButtonElement | null;
 
-  const originalContent = button.innerHTML;
+  if (downloadResultsButton) {
+    downloadResultsButton.addEventListener('click', async () => {
+      if (!currentQueryResults) {
+        alert('No query results to export');
+        return;
+      }
 
-  try {
-    // Show loading state
-    button.disabled = true;
-    button.innerHTML = '⏳';
+      const originalContent = downloadResultsButton.innerHTML;
 
-    // Call API to export results
-    const blob = await api.exportResults({
-      results: currentQueryResults.results,
-      columns: currentQueryResults.columns
+      try {
+        // Show loading state
+        downloadResultsButton.disabled = true;
+        downloadResultsButton.innerHTML = '⏳';
+
+        // Call API to export results
+        const blob = await api.exportResults({
+          results: currentQueryResults.results,
+          columns: currentQueryResults.columns
+        });
+
+        // Download the CSV file
+        const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0].replace('T', '_');
+        downloadCSV(blob, `query_results_${timestamp}.csv`);
+
+        // Show success feedback
+        downloadResultsButton.innerHTML = '✓';
+        setTimeout(() => {
+          downloadResultsButton.innerHTML = originalContent;
+          downloadResultsButton.disabled = false;
+        }, 1000);
+      } catch (error) {
+        console.error('Export failed:', error);
+
+        // Show error feedback
+        downloadResultsButton.innerHTML = '✗';
+        setTimeout(() => {
+          downloadResultsButton.innerHTML = originalContent;
+          downloadResultsButton.disabled = false;
+        }, 2000);
+
+        alert(error instanceof Error ? error.message : 'Failed to export results');
+      }
     });
-
-    // Download the CSV file
-    const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0].replace('T', '_');
-    downloadCSV(blob, `query_results_${timestamp}.csv`);
-
-    // Show success feedback
-    button.innerHTML = '✓';
-    setTimeout(() => {
-      button.innerHTML = originalContent;
-      button.disabled = false;
-    }, 1000);
-  } catch (error) {
-    console.error('Export failed:', error);
-
-    // Show error feedback
-    button.innerHTML = '✗';
-    setTimeout(() => {
-      button.innerHTML = originalContent;
-      button.disabled = false;
-    }, 2000);
-
-    alert(error instanceof Error ? error.message : 'Failed to export results');
   }
 }

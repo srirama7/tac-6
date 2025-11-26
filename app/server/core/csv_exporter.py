@@ -8,11 +8,10 @@ import io
 import sqlite3
 from typing import Any, Dict, List
 
-from app.server.core.sql_security import (
+from core.sql_security import (
     check_table_exists,
     execute_query_safely,
     validate_identifier,
-    SQLSecurityError,
 )
 
 
