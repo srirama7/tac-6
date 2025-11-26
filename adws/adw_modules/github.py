@@ -84,7 +84,8 @@ def fetch_issue(issue_number: str, repo_path: str) -> GitHubIssue:
     env = get_github_env()
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        # Use UTF-8 encoding for proper handling of special characters
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, encoding='utf-8')
 
         if result.returncode == 0:
             # Parse JSON response into Pydantic model
@@ -135,7 +136,8 @@ def make_issue_comment(issue_id: str, comment: str) -> None:
     env = get_github_env()
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        # Use UTF-8 encoding for proper handling of special characters
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, encoding='utf-8')
 
         if result.returncode == 0:
             print(f"Successfully posted comment to issue #{issue_id}")
@@ -169,7 +171,7 @@ def mark_issue_in_progress(issue_id: str) -> None:
     env = get_github_env()
 
     # Try to add label (may fail if label doesn't exist)
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env, encoding='utf-8')
     if result.returncode != 0:
         print(f"Note: Could not add 'in_progress' label: {result.stderr}")
 
@@ -187,7 +189,7 @@ def mark_issue_in_progress(issue_id: str) -> None:
         "--add-assignee",
         "@me",
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env, encoding='utf-8')
     if result.returncode == 0:
         print(f"Assigned issue #{issue_id} to self")
 
@@ -214,7 +216,7 @@ def fetch_open_issues(repo_path: str) -> List[GitHubIssueListItem]:
 
         # DEBUG level - not printing command
         result = subprocess.run(
-            cmd, capture_output=True, text=True, check=True, env=env
+            cmd, capture_output=True, text=True, check=True, env=env, encoding='utf-8'
         )
 
         issues_data = json.loads(result.stdout)
@@ -248,7 +250,7 @@ def fetch_issue_comments(repo_path: str, issue_number: int) -> List[Dict]:
         env = get_github_env()
 
         result = subprocess.run(
-            cmd, capture_output=True, text=True, check=True, env=env
+            cmd, capture_output=True, text=True, check=True, env=env, encoding='utf-8'
         )
         data = json.loads(result.stdout)
         comments = data.get("comments", [])
