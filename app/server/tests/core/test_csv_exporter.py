@@ -1,6 +1,5 @@
 """Tests for CSV export functionality"""
 
-import pytest
 from core.csv_exporter import (
     generate_csv_from_data,
     sanitize_filename,
