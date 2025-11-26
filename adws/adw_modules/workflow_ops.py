@@ -130,7 +130,13 @@ def classify_issue(
         if keyword_match:
             issue_command = f"/{keyword_match.group(1).lower()}"
         elif output == "0" or "none of the above" in output.lower() or "not any" in output.lower():
-            return None, f"No command selected: {response.output}"
+            # Instead of failing, default to /feature for unknown issues
+            logger.warning(f"Issue doesn't match known types, defaulting to /feature. Raw output: {output}")
+            issue_command = "/feature"
+        elif "invalid" in output.lower() or "error" in output.lower():
+            # Handle "Invalid command" or other error messages gracefully
+            logger.warning(f"Classification returned error-like response, defaulting to /feature. Raw output: {output}")
+            issue_command = "/feature"
         else:
             # Default to /feature for general enhancement requests
             logger.warning(f"Could not classify issue, defaulting to /feature. Raw output: {output}")
