@@ -142,6 +142,7 @@ class AgentTemplateRequest(BaseModel):
     args: List[str]
     adw_id: str
     model: Literal["sonnet", "opus"] = "sonnet"
+    dangerously_skip_permissions: bool = False
 
 
 class ClaudeCodeResultMessage(BaseModel):

@@ -564,12 +564,14 @@ def execute_single_e2e_test(
     )
 
     # Create template request
+    # Enable dangerously_skip_permissions for E2E tests so scripts like reset_db.sh can run without prompts
     request = AgentTemplateRequest(
         agent_name=agent_name,
         slash_command="/test_e2e",
         args=[adw_id, agent_name, test_file],  # Pass ADW ID and agent name for screenshot directory
         adw_id=adw_id,
         model="sonnet",
+        dangerously_skip_permissions=True,
     )
 
     # Execute test
@@ -707,12 +709,14 @@ def resolve_failed_e2e_tests(
         agent_name = f"e2e_test_resolver_iter{iteration}_{idx}"
 
         # Create template request
+        # Enable dangerously_skip_permissions for E2E test resolution so scripts can run without prompts
         resolve_request = AgentTemplateRequest(
             agent_name=agent_name,
             slash_command="/resolve_failed_e2e_test",
             args=[test_payload],
             adw_id=adw_id,
             model="sonnet",
+            dangerously_skip_permissions=True,
         )
 
         # Post to issue
