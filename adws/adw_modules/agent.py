@@ -86,50 +86,40 @@ def convert_jsonl_to_json(jsonl_file: str) -> str:
 
 
 def get_claude_env() -> Dict[str, str]:
-    """Get only the required environment variables for Claude Code execution.
+    """Get environment variables for Claude Code execution.
 
-    Returns a dictionary containing only the necessary environment variables
-    based on .env.sample configuration.
+    Inherits the full parent environment and adds/overrides specific variables.
+    This is necessary on Windows where many system variables (SystemRoot, TEMP,
+    USERPROFILE, etc.) are required for network/SSL operations and Claude Code.
 
     Subprocess env behavior:
     - env=None → Inherits parent's environment (default)
     - env={} → Empty environment (no variables)
     - env=custom_dict → Only uses specified variables
-
-    So this will work with gh authentication:
-    # These are equivalent:
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    result = subprocess.run(cmd, capture_output=True, text=True, env=None)
-
-    But this will NOT work (no PATH, no auth):
-    result = subprocess.run(cmd, capture_output=True, text=True, env={})
     """
-    required_env_vars = {
-        # Anthropic Configuration (required)
-        "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
-        # Claude Code Configuration
-        "CLAUDE_CODE_PATH": os.getenv("CLAUDE_CODE_PATH", "claude"),
-        "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": os.getenv(
-            "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR", "true"
-        ),
-        # Agent Cloud Sandbox Environment (optional)
-        "E2B_API_KEY": os.getenv("E2B_API_KEY"),
-        # Basic environment variables Claude Code might need
-        "HOME": os.getenv("HOME"),
-        "USER": os.getenv("USER"),
-        "PATH": os.getenv("PATH"),
-        "SHELL": os.getenv("SHELL"),
-        "TERM": os.getenv("TERM"),
-    }
+    # Start with full parent environment for cross-platform compatibility
+    env = os.environ.copy()
 
-    # Only add GitHub tokens if GITHUB_PAT exists
+    # Add/override specific variables for ADW
+    if os.getenv("ANTHROPIC_API_KEY"):
+        env["ANTHROPIC_API_KEY"] = os.getenv("ANTHROPIC_API_KEY")
+
+    env["CLAUDE_CODE_PATH"] = os.getenv("CLAUDE_CODE_PATH", "claude")
+    env["CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR"] = os.getenv(
+        "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR", "true"
+    )
+
+    # Add E2B key if present
+    if os.getenv("E2B_API_KEY"):
+        env["E2B_API_KEY"] = os.getenv("E2B_API_KEY")
+
+    # Add GitHub tokens if GITHUB_PAT exists
     github_pat = os.getenv("GITHUB_PAT")
     if github_pat:
-        required_env_vars["GITHUB_PAT"] = github_pat
-        required_env_vars["GH_TOKEN"] = github_pat  # Claude Code uses GH_TOKEN
+        env["GITHUB_PAT"] = github_pat
+        env["GH_TOKEN"] = github_pat  # Claude Code uses GH_TOKEN
 
-    # Filter out None values
-    return {k: v for k, v in required_env_vars.items() if v is not None}
+    return env
 
 
 def save_prompt(prompt: str, adw_id: str, agent_name: str = "ops") -> None:
@@ -183,14 +173,28 @@ def prompt_claude_code(request: AgentPromptRequest) -> AgentPromptResponse:
     if request.dangerously_skip_permissions:
         cmd.append("--dangerously-skip-permissions")
 
-    # Set up environment with only required variables
+    # Set up environment with full parent environment
     env = get_claude_env()
 
+    # Get project root (parent of adws directory) to ensure .claude/commands are loaded
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
     try:
-        # Execute Claude Code and pipe output to file
-        with open(request.output_file, "w") as f:
+        # Execute Claude Code from project root and pipe output to file
+        # Write prompt to file to avoid shell escaping issues with JSON
+        prompt_file = request.output_file.replace('.jsonl', '_prompt.txt')
+        with open(prompt_file, "w", encoding="utf-8") as f:
+            f.write(request.prompt)
+
+        # Build command using stdin from file
+        stdin_cmd = f'type "{prompt_file}" | {CLAUDE_PATH}'
+        stdin_cmd += f' --model {request.model} --output-format stream-json --verbose'
+        if request.dangerously_skip_permissions:
+            stdin_cmd += ' --dangerously-skip-permissions'
+
+        with open(request.output_file, "w", encoding="utf-8") as f:
             result = subprocess.run(
-                cmd, stdout=f, stderr=subprocess.PIPE, text=True, env=env
+                stdin_cmd, stdout=f, stderr=subprocess.PIPE, text=True, cwd=project_root, shell=True, encoding='utf-8'
             )
 
         if result.returncode == 0:

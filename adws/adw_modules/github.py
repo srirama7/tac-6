@@ -23,29 +23,22 @@ from .data_types import GitHubIssue, GitHubIssueListItem
 
 def get_github_env() -> Optional[dict]:
     """Get environment with GitHub token set up. Returns None if no GITHUB_PAT.
-    
+
     Subprocess env behavior:
     - env=None → Inherits parent's environment (default)
     - env={} → Empty environment (no variables)
     - env=custom_dict → Only uses specified variables
-    
-    So this will work with gh authentication:
-    # These are equivalent:
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    result = subprocess.run(cmd, capture_output=True, text=True, env=None)
-    
-    But this will NOT work (no PATH, no auth):
-    result = subprocess.run(cmd, capture_output=True, text=True, env={})
+
+    On Windows, we need to inherit the full environment to ensure network/SSL
+    operations work correctly (SystemRoot, TEMP, USERPROFILE, etc. are required).
     """
     github_pat = os.getenv("GITHUB_PAT")
     if not github_pat:
         return None
-    
-    # Only create minimal env with GitHub token
-    env = {
-        "GH_TOKEN": github_pat,
-        "PATH": os.environ.get("PATH", ""),
-    }
+
+    # Inherit full environment and add/override GH_TOKEN
+    env = os.environ.copy()
+    env["GH_TOKEN"] = github_pat
     return env
 
 
@@ -73,8 +66,13 @@ def extract_repo_path(github_url: str) -> str:
     return github_url.replace("https://github.com/", "").replace(".git", "")
 
 
-def fetch_issue(issue_number: str, repo_path: str) -> GitHubIssue:
-    """Fetch GitHub issue using gh CLI and return typed model."""
+def fetch_issue(issue_number: str, repo_path: str, max_retries: int = 3) -> GitHubIssue:
+    """Fetch GitHub issue using gh CLI and return typed model.
+
+    Includes retry logic for transient network errors.
+    """
+    import time
+
     # Use JSON output for structured data
     cmd = [
         "gh",
@@ -90,38 +88,56 @@ def fetch_issue(issue_number: str, repo_path: str) -> GitHubIssue:
     # Set up environment with GitHub token if available
     env = get_github_env()
 
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, env=env, encoding='utf-8')
 
-        if result.returncode == 0:
-            # Parse JSON response into Pydantic model
-            issue_data = json.loads(result.stdout)
-            issue = GitHubIssue(**issue_data)
+            if result.returncode == 0:
+                # Parse JSON response into Pydantic model
+                issue_data = json.loads(result.stdout)
+                issue = GitHubIssue(**issue_data)
+                return issue
+            else:
+                last_error = result.stderr
+                # Check for network errors - retry if network issue
+                if "error connecting" in result.stderr.lower() or "network" in result.stderr.lower():
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 2  # Exponential backoff: 2, 4, 6 seconds
+                        print(f"Network error, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})...")
+                        time.sleep(wait_time)
+                        continue
+                print(result.stderr, file=sys.stderr)
+                sys.exit(result.returncode)
+        except FileNotFoundError:
+            print("Error: GitHub CLI (gh) is not installed.", file=sys.stderr)
+            print("\nTo install gh:", file=sys.stderr)
+            print("  - macOS: brew install gh", file=sys.stderr)
+            print(
+                "  - Linux: See https://github.com/cli/cli#installation",
+                file=sys.stderr,
+            )
+            print(
+                "  - Windows: See https://github.com/cli/cli#installation", file=sys.stderr
+            )
+            print("\nAfter installation, authenticate with: gh auth login", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error parsing issue data: {e}", file=sys.stderr)
+            sys.exit(1)
 
-            return issue
-        else:
-            print(result.stderr, file=sys.stderr)
-            sys.exit(result.returncode)
-    except FileNotFoundError:
-        print("Error: GitHub CLI (gh) is not installed.", file=sys.stderr)
-        print("\nTo install gh:", file=sys.stderr)
-        print("  - macOS: brew install gh", file=sys.stderr)
-        print(
-            "  - Linux: See https://github.com/cli/cli#installation",
-            file=sys.stderr,
-        )
-        print(
-            "  - Windows: See https://github.com/cli/cli#installation", file=sys.stderr
-        )
-        print("\nAfter installation, authenticate with: gh auth login", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error parsing issue data: {e}", file=sys.stderr)
-        sys.exit(1)
+    # If we've exhausted all retries
+    print(f"Failed to fetch issue after {max_retries} attempts. Last error: {last_error}", file=sys.stderr)
+    sys.exit(1)
 
 
-def make_issue_comment(issue_id: str, comment: str) -> None:
-    """Post a comment to a GitHub issue using gh CLI."""
+def make_issue_comment(issue_id: str, comment: str, max_retries: int = 3) -> None:
+    """Post a comment to a GitHub issue using gh CLI.
+
+    Includes retry logic for transient network errors.
+    """
+    import time
+
     # Get repo information from git remote
     github_repo_url = get_repo_url()
     repo_path = extract_repo_path(github_repo_url)
@@ -141,17 +157,34 @@ def make_issue_comment(issue_id: str, comment: str) -> None:
     # Set up environment with GitHub token if available
     env = get_github_env()
 
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, env=env, encoding='utf-8')
 
-        if result.returncode == 0:
-            print(f"Successfully posted comment to issue #{issue_id}")
-        else:
-            print(f"Error posting comment: {result.stderr}", file=sys.stderr)
-            raise RuntimeError(f"Failed to post comment: {result.stderr}")
-    except Exception as e:
-        print(f"Error posting comment: {e}", file=sys.stderr)
-        raise
+            if result.returncode == 0:
+                print(f"Successfully posted comment to issue #{issue_id}")
+                return
+            else:
+                last_error = result.stderr
+                # Check for network errors - retry if network issue
+                if "error connecting" in result.stderr.lower() or "network" in result.stderr.lower():
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 3  # Exponential backoff: 3, 6, 9 seconds
+                        print(f"Network error posting comment, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})...")
+                        time.sleep(wait_time)
+                        continue
+                print(f"Error posting comment: {result.stderr}", file=sys.stderr)
+                raise RuntimeError(f"Failed to post comment: {result.stderr}")
+        except RuntimeError:
+            raise
+        except Exception as e:
+            print(f"Error posting comment: {e}", file=sys.stderr)
+            raise
+
+    # If we've exhausted all retries
+    print(f"Failed to post comment after {max_retries} attempts. Last error: {last_error}", file=sys.stderr)
+    raise RuntimeError(f"Failed to post comment after {max_retries} retries: {last_error}")
 
 
 def mark_issue_in_progress(issue_id: str) -> None:
