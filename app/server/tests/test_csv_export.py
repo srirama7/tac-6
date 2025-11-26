@@ -69,14 +69,25 @@ def client(test_db):
     """Create a test client and set up database"""
     # Copy test database to the expected location
     import shutil
+    import gc
     os.makedirs('db', exist_ok=True)
     shutil.copy(test_db, 'db/database.db')
 
     yield TestClient(app)
 
-    # Cleanup
+    # Cleanup - force garbage collection to release file handles on Windows
+    gc.collect()
+
+    # Retry cleanup with delay for Windows file locking
     if os.path.exists('db/database.db'):
-        os.remove('db/database.db')
+        for _ in range(3):
+            try:
+                os.remove('db/database.db')
+                break
+            except PermissionError:
+                import time
+                time.sleep(0.1)
+                gc.collect()
 
 
 class TestTableExportEndpoint:
