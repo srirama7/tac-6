@@ -2,6 +2,7 @@ import './style.css'
 import { api } from './api/client'
 
 // Global state
+let lastQuery: string = '';
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -26,7 +27,7 @@ function initializeQueryInput() {
     try {
       const response = await api.processQuery({
         query,
-        llm_provider: 'openai'  // Default to OpenAI
+        llm_provider: 'gemini'  // Default to Gemini
       });
       
       displayResults(response, query);
@@ -117,13 +118,15 @@ async function loadDatabaseSchema() {
 
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
+  // Store the query for export
+  lastQuery = query;
+
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+
   resultsSection.style.display = 'block';
-  
+
   // Display natural language query and SQL
   sqlDisplay.innerHTML = `
     <div class="query-display">
@@ -133,7 +136,7 @@ function displayResults(response: QueryResponse, query: string) {
       <strong>SQL:</strong> <code>${response.sql}</code>
     </div>
   `;
-  
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
@@ -144,12 +147,39 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
+
+  // Setup results header with download and toggle buttons
+  const resultsHeader = document.querySelector('.results-header') as HTMLElement;
+
+  // Check if actions container already exists
+  let actionsContainer = resultsHeader.querySelector('.results-actions') as HTMLDivElement;
+  if (!actionsContainer) {
+    actionsContainer = document.createElement('div');
+    actionsContainer.className = 'results-actions';
+
+    // Download button for results
+    const downloadResultsButton = document.createElement('button');
+    downloadResultsButton.className = 'download-button';
+    downloadResultsButton.id = 'download-results';
+    downloadResultsButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+    downloadResultsButton.title = 'Download results as CSV';
+    downloadResultsButton.onclick = downloadQueryResultsAsCsv;
+
+    // Move existing toggle button into container
+    const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
+    actionsContainer.appendChild(downloadResultsButton);
+    actionsContainer.appendChild(toggleButton);
+    resultsHeader.appendChild(actionsContainer);
+  }
+
   // Initialize toggle button
   const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
-  toggleButton.addEventListener('click', () => {
+  // Remove old listeners by cloning
+  const newToggleButton = toggleButton.cloneNode(true) as HTMLButtonElement;
+  toggleButton.parentNode?.replaceChild(newToggleButton, toggleButton);
+  newToggleButton.addEventListener('click', () => {
     resultsContainer.style.display = resultsContainer.style.display === 'none' ? 'block' : 'none';
-    toggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
+    newToggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
   });
 }
 
@@ -220,14 +250,29 @@ function displayTables(tables: TableSchema[]) {
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
     
+    // Create actions container
+    const tableActions = document.createElement('div');
+    tableActions.className = 'table-actions';
+
+    // Download button
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-button';
+    downloadButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+    downloadButton.title = 'Download as CSV';
+    downloadButton.onclick = () => downloadTableAsCsv(table.name);
+
+    // Remove button
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
+    tableActions.appendChild(downloadButton);
+    tableActions.appendChild(removeButton);
+
     tableHeader.appendChild(tableLeft);
-    tableHeader.appendChild(removeButton);
+    tableHeader.appendChild(tableActions);
     
     // Columns section
     const tableColumns = document.createElement('div');
@@ -394,7 +439,7 @@ function getTypeEmoji(type: string): string {
 async function loadSampleData(sampleType: string) {
   try {
     let filename: string;
-    
+
     if (sampleType === 'users') {
       filename = 'users.json';
     } else if (sampleType === 'products') {
@@ -404,19 +449,79 @@ async function loadSampleData(sampleType: string) {
     } else {
       throw new Error(`Unknown sample type: ${sampleType}`);
     }
-    
+
     const response = await fetch(`/sample-data/${filename}`);
-    
+
     if (!response.ok) {
       throw new Error('Failed to load sample data');
     }
-    
+
     const blob = await response.blob();
     const file = new File([blob], filename, { type: blob.type });
-    
+
     // Upload the file
     await handleFileUpload(file);
   } catch (error) {
     displayError(error instanceof Error ? error.message : 'Failed to load sample data');
+  }
+}
+
+// Download table as CSV
+async function downloadTableAsCsv(tableName: string) {
+  try {
+    const response = await fetch(`/api/table/${tableName}/export`);
+
+    if (!response.ok) {
+      throw new Error('Failed to export table');
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${tableName}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    a.remove();
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to download table');
+  }
+}
+
+// Download query results as CSV
+async function downloadQueryResultsAsCsv() {
+  if (!lastQuery) {
+    displayError('No query results to export');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/query/export', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        query: lastQuery,
+        llm_provider: 'gemini'
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to export query results');
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'query_results.csv';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    a.remove();
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to download query results');
   }
 }
