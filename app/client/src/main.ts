@@ -1,7 +1,50 @@
 import './style.css'
 import { api } from './api/client'
 
-// Global state
+// Global state for storing current query results
+let currentQueryResults: Record<string, any>[] = [];
+let currentQueryColumns: string[] = [];
+
+// Download helper function
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Download table as CSV
+async function downloadTableAsCSV(tableName: string) {
+  try {
+    const blob = await api.exportTable(tableName);
+    downloadBlob(blob, `${tableName}.csv`);
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to export table');
+  }
+}
+
+// Download query results as CSV
+async function downloadQueryResultsAsCSV() {
+  if (currentQueryResults.length === 0) {
+    displayError('No query results to export');
+    return;
+  }
+
+  try {
+    const blob = await api.exportQueryResults({
+      results: currentQueryResults,
+      columns: currentQueryColumns,
+      filename: 'query_results.csv'
+    });
+    downloadBlob(blob, 'query_results.csv');
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to export query results');
+  }
+}
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -182,13 +225,16 @@ async function loadDatabaseSchema() {
 
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
+  // Store current results for export
+  currentQueryResults = response.results;
+  currentQueryColumns = response.columns;
+
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+
   resultsSection.style.display = 'block';
-  
+
   // Display natural language query and SQL
   sqlDisplay.innerHTML = `
     <div class="query-display">
@@ -198,7 +244,7 @@ function displayResults(response: QueryResponse, query: string) {
       <strong>SQL:</strong> <code>${response.sql}</code>
     </div>
   `;
-  
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
@@ -209,13 +255,19 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
+
   // Initialize toggle button
   const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
-  toggleButton.addEventListener('click', () => {
+  toggleButton.onclick = () => {
     resultsContainer.style.display = resultsContainer.style.display === 'none' ? 'block' : 'none';
     toggleButton.textContent = resultsContainer.style.display === 'none' ? 'Show' : 'Hide';
-  });
+  };
+
+  // Initialize download results button
+  const downloadResultsButton = document.getElementById('download-results') as HTMLButtonElement;
+  if (downloadResultsButton) {
+    downloadResultsButton.onclick = () => downloadQueryResultsAsCSV();
+  }
 }
 
 // Create results table
@@ -285,14 +337,28 @@ function displayTables(tables: TableSchema[]) {
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
     
+    // Create buttons container
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.className = 'table-header-buttons';
+
+    // Download button (left of remove button)
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-button';
+    downloadButton.innerHTML = '&#x2B73;'; // Unicode download arrow
+    downloadButton.title = 'Download as CSV';
+    downloadButton.onclick = () => downloadTableAsCSV(table.name);
+
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
+    buttonsContainer.appendChild(downloadButton);
+    buttonsContainer.appendChild(removeButton);
+
     tableHeader.appendChild(tableLeft);
-    tableHeader.appendChild(removeButton);
+    tableHeader.appendChild(buttonsContainer);
     
     // Columns section
     const tableColumns = document.createElement('div');

@@ -85,3 +85,9 @@ class HealthCheckResponse(BaseModel):
     tables_count: int
     version: str = "1.0.0"
     uptime_seconds: float
+
+# Export Models
+class ExportQueryResultsRequest(BaseModel):
+    results: List[Dict[str, Any]] = Field(..., description="The query results to export")
+    columns: List[str] = Field(..., description="Column names for CSV header")
+    filename: Optional[str] = Field(default="query_results.csv", description="Optional custom filename")
