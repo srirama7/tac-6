@@ -28,6 +28,11 @@ class QueryResponse(BaseModel):
     execution_time_ms: float
     error: Optional[str] = None
 
+class QueryExportRequest(BaseModel):
+    query: str = Field(..., description="Natural language query")
+    llm_provider: Literal["openai", "anthropic"] = "openai"
+    table_name: Optional[str] = None  # If querying specific table
+
 # Database Schema Models
 class ColumnInfo(BaseModel):
     name: str

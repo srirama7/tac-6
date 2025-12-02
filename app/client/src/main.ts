@@ -115,15 +115,23 @@ async function loadDatabaseSchema() {
   }
 }
 
+// Global state for current query (for CSV export)
+let currentQuery: string = '';
+let currentLLMProvider: 'openai' | 'anthropic' = 'openai';
+
 // Display query results
 function displayResults(response: QueryResponse, query: string) {
-  
+
   const resultsSection = document.getElementById('results-section') as HTMLElement;
   const sqlDisplay = document.getElementById('sql-display') as HTMLDivElement;
   const resultsContainer = document.getElementById('results-container') as HTMLDivElement;
-  
+
   resultsSection.style.display = 'block';
-  
+
+  // Store current query for CSV export
+  currentQuery = query;
+  currentLLMProvider = 'openai';  // Default provider
+
   // Display natural language query and SQL
   sqlDisplay.innerHTML = `
     <div class="query-display">
@@ -133,7 +141,7 @@ function displayResults(response: QueryResponse, query: string) {
       <strong>SQL:</strong> <code>${response.sql}</code>
     </div>
   `;
-  
+
   // Display results table
   if (response.error) {
     resultsContainer.innerHTML = `<div class="error-message">${response.error}</div>`;
@@ -144,7 +152,13 @@ function displayResults(response: QueryResponse, query: string) {
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(table);
   }
-  
+
+  // Initialize download button
+  const downloadButton = document.getElementById('download-results') as HTMLButtonElement;
+  if (downloadButton) {
+    downloadButton.onclick = () => downloadQueryResultsCSV(currentQuery, currentLLMProvider);
+  }
+
   // Initialize toggle button
   const toggleButton = document.getElementById('toggle-results') as HTMLButtonElement;
   toggleButton.addEventListener('click', () => {
@@ -216,17 +230,24 @@ function displayTables(tables: TableSchema[]) {
     const tableInfo = document.createElement('div');
     tableInfo.className = 'table-info';
     tableInfo.textContent = `${table.row_count} rows, ${table.columns.length} columns`;
-    
+
     tableLeft.appendChild(tableName);
     tableLeft.appendChild(tableInfo);
-    
+
+    const downloadButton = document.createElement('button');
+    downloadButton.className = 'download-button';
+    downloadButton.innerHTML = '⬇';
+    downloadButton.title = 'Download as CSV';
+    downloadButton.onclick = () => downloadTableCSV(table.name);
+
     const removeButton = document.createElement('button');
     removeButton.className = 'remove-table-button';
     removeButton.innerHTML = '&times;';
     removeButton.title = 'Remove table';
     removeButton.onclick = () => removeTable(table.name);
-    
+
     tableHeader.appendChild(tableLeft);
+    tableHeader.appendChild(downloadButton);
     tableHeader.appendChild(removeButton);
     
     // Columns section
@@ -418,5 +439,42 @@ async function loadSampleData(sampleType: string) {
     await handleFileUpload(file);
   } catch (error) {
     displayError(error instanceof Error ? error.message : 'Failed to load sample data');
+  }
+}
+
+// CSV Download Helper Functions
+
+// Generic CSV download helper
+function downloadCSV(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Download table as CSV
+async function downloadTableCSV(tableName: string) {
+  try {
+    const blob = await api.exportTable(tableName);
+    downloadCSV(blob, `${tableName}.csv`);
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to export table');
+  }
+}
+
+// Download query results as CSV
+async function downloadQueryResultsCSV(query: string, llmProvider: 'openai' | 'anthropic') {
+  try {
+    const blob = await api.exportQueryResults({
+      query,
+      llm_provider: llmProvider
+    });
+    downloadCSV(blob, 'query_results.csv');
+  } catch (error) {
+    displayError(error instanceof Error ? error.message : 'Failed to export query results');
   }
 }

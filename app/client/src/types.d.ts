@@ -25,6 +25,12 @@ interface QueryResponse {
   error?: string;
 }
 
+interface QueryExportRequest {
+  query: string;
+  llm_provider: "openai" | "anthropic";
+  table_name?: string;
+}
+
 // Database Schema Types
 interface ColumnInfo {
   name: string;

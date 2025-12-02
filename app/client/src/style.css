@@ -148,6 +148,12 @@ h2 {
   margin-bottom: 1rem;
 }
 
+.results-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .sql-display {
   background: #f8f9fa;
   border: 1px solid var(--border-color);
@@ -318,6 +324,26 @@ h2 {
 .remove-table-button:hover {
   background: rgba(220, 53, 69, 0.1);
   color: var(--error-color);
+}
+
+.download-button {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.download-button:hover {
+  background: rgba(13, 110, 253, 0.1);
+  color: var(--primary-color);
 }
 
 /* Loading States */

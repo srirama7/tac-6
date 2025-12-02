@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from datetime import datetime
 import os
 import sqlite3
@@ -7,11 +8,13 @@ import traceback
 from dotenv import load_dotenv
 import logging
 import sys
+import io
 
 from core.data_models import (
     FileUploadResponse,
     QueryRequest,
     QueryResponse,
+    QueryExportRequest,
     DatabaseSchemaResponse,
     InsightsRequest,
     InsightsResponse,
@@ -29,6 +32,7 @@ from core.sql_security import (
     check_table_exists,
     SQLSecurityError
 )
+from core.csv_generator import generate_csv_from_results
 
 # Load .env file from server directory
 load_dotenv()
@@ -274,6 +278,97 @@ async def delete_table(table_name: str):
         logger.error(f"[ERROR] Table deletion failed: {str(e)}")
         logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(500, f"Error deleting table: {str(e)}")
+
+@app.get("/api/export/table/{table_name}")
+async def export_table(table_name: str):
+    """Export entire table as CSV file"""
+    try:
+        # Validate table name using security module
+        try:
+            validate_identifier(table_name, "table")
+        except SQLSecurityError as e:
+            raise HTTPException(400, str(e))
+
+        conn = sqlite3.connect("db/database.db")
+
+        # Check if table exists using secure method
+        if not check_table_exists(conn, table_name):
+            conn.close()
+            raise HTTPException(404, f"Table '{table_name}' not found")
+
+        # Query all rows from the table
+        result = execute_query_safely(
+            conn,
+            "SELECT * FROM {table}",
+            identifier_params={'table': table_name}
+        )
+        conn.close()
+
+        # Get columns and results
+        columns = result['columns']
+        results = result['results']
+
+        # Generate CSV content
+        csv_content = generate_csv_from_results(results, columns)
+
+        # Create streaming response
+        response = StreamingResponse(
+            io.BytesIO(csv_content.encode('utf-8')),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=\"{table_name}.csv\""
+            }
+        )
+
+        logger.info(f"[SUCCESS] Table exported: {table_name}, rows: {len(results)}")
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ERROR] Table export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Error exporting table: {str(e)}")
+
+@app.post("/api/export/query")
+async def export_query_results(request: QueryExportRequest):
+    """Export query results as CSV file"""
+    try:
+        # Get database schema
+        schema_info = get_database_schema()
+
+        # Generate SQL using routing logic (same as /api/query endpoint)
+        sql = generate_sql(request, schema_info)
+
+        # Execute SQL query
+        result = execute_sql_safely(sql)
+
+        if result['error']:
+            raise Exception(result['error'])
+
+        # Get columns and results
+        columns = result['columns']
+        results = result['results']
+
+        # Generate CSV content
+        csv_content = generate_csv_from_results(results, columns)
+
+        # Create streaming response
+        response = StreamingResponse(
+            io.BytesIO(csv_content.encode('utf-8')),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=\"query_results.csv\""
+            }
+        )
+
+        logger.info(f"[SUCCESS] Query results exported: SQL={sql}, rows: {len(results)}")
+        return response
+
+    except Exception as e:
+        logger.error(f"[ERROR] Query export failed: {str(e)}")
+        logger.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(500, f"Error exporting query results: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
