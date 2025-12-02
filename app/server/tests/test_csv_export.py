@@ -1,6 +1,7 @@
 """Tests for CSV export functionality."""
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 import sys
 import os
 import sqlite3
@@ -269,8 +270,12 @@ class TestQueryExportEndpoint:
         conn.commit()
         conn.close()
 
-    def test_export_valid_query(self):
+    @patch('server.generate_sql')
+    def test_export_valid_query(self, mock_generate_sql):
         """Test exporting valid query results."""
+        # Mock the LLM to return a valid SQL query
+        mock_generate_sql.return_value = "SELECT * FROM test_products"
+
         response = client.post(
             "/api/export/query",
             json={"query": "Show all products", "llm_provider": "openai"}
@@ -289,8 +294,12 @@ class TestQueryExportEndpoint:
         # Should have results
         assert len(rows) > 0
 
-    def test_export_query_with_no_results(self):
+    @patch('server.generate_sql')
+    def test_export_query_with_no_results(self, mock_generate_sql):
         """Test exporting query with no results."""
+        # Mock the LLM to return a query that returns no results
+        mock_generate_sql.return_value = "SELECT * FROM test_products WHERE price > 1000"
+
         response = client.post(
             "/api/export/query",
             json={"query": "Show products where price > 1000", "llm_provider": "openai"}
@@ -306,8 +315,12 @@ class TestQueryExportEndpoint:
         # Empty results are valid
         assert len(rows) >= 0
 
-    def test_export_invalid_query(self):
+    @patch('server.generate_sql')
+    def test_export_invalid_query(self, mock_generate_sql):
         """Test exporting with invalid query."""
+        # Mock the LLM to return invalid SQL
+        mock_generate_sql.return_value = "INVALID SQL SYNTAX HERE"
+
         response = client.post(
             "/api/export/query",
             json={"query": "INVALID SQL SYNTAX HERE", "llm_provider": "openai"}

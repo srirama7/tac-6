@@ -297,16 +297,20 @@ async def export_table(table_name: str):
             raise HTTPException(404, f"Table '{table_name}' not found")
 
         # Query all rows from the table
-        result = execute_query_safely(
+        cursor = execute_query_safely(
             conn,
             "SELECT * FROM {table}",
             identifier_params={'table': table_name}
         )
-        conn.close()
 
-        # Get columns and results
-        columns = result['columns']
-        results = result['results']
+        # Get columns from cursor description
+        columns = [desc[0] for desc in cursor.description]
+
+        # Fetch all rows and convert to list of dicts
+        rows = cursor.fetchall()
+        results = [dict(zip(columns, row)) for row in rows]
+
+        conn.close()
 
         # Generate CSV content
         csv_content = generate_csv_from_results(results, columns)
