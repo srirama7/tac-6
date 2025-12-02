@@ -6,12 +6,7 @@ import pytest
 import sqlite3
 import tempfile
 import os
-import io
-from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
-
-# Import the app and override with test database path
-import server
 
 
 # Create a temporary database for testing

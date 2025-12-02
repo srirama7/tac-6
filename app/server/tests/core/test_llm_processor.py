@@ -6,8 +6,6 @@ from core.llm_processor import (
     generate_sql_with_claude_code,
     format_schema_for_prompt,
     generate_sql,
-    generate_random_query_with_gemini,
-    generate_random_query_with_claude_code,
     generate_random_query
 )
 from core.data_models import QueryRequest
