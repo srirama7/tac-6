@@ -97,7 +97,7 @@ class ADWState:
             state.data = state_data.model_dump()
 
             if logger:
-                logger.info(f"🔍 Found existing state from {state_path}")
+                logger.info(f"Found existing state from {state_path}")
                 logger.info(f"State: {json.dumps(state_data.model_dump(), indent=2)}")
 
             return state

@@ -68,8 +68,8 @@ MAX_REVIEW_RETRY_ATTEMPTS = 3
 
 def check_env_vars(logger: Optional[logging.Logger] = None) -> None:
     """Check that all required environment variables are set."""
+    # Claude Code CLI uses local authentication, no API key needed
     required_vars = [
-        "ANTHROPIC_API_KEY",
         "CLAUDE_CODE_PATH",
     ]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
